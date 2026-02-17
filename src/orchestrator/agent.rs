@@ -29,6 +29,8 @@ pub struct AgentConfig {
 pub struct Agent {
     id: AgentId,
     config: AgentConfig,
+    /// Claude CLI session ID for conversation continuity.
+    session_id: Option<String>,
     message_rx: mpsc::Receiver<AgentMessage>,
     outgoing_tx: mpsc::Sender<AgentOutput>,
     ui_tx: broadcast::Sender<(AgentId, ClaudeOutput)>,
@@ -45,6 +47,7 @@ impl Agent {
         Self {
             id,
             config,
+            session_id: None,
             message_rx,
             outgoing_tx,
             ui_tx,
@@ -72,17 +75,22 @@ impl Agent {
         Ok(())
     }
 
-    async fn process_prompt(&self, prompt: &str) -> Result<()> {
+    async fn process_prompt(&mut self, prompt: &str) -> Result<()> {
         let command_prefix = match &self.config.worktree_path {
             Some(path) => bwrap_command_prefix(path),
             None => bwrap_readonly_prefix(),
+        };
+
+        let extra_args = match &self.session_id {
+            Some(sid) => vec!["--resume".into(), sid.clone()],
+            None => Vec::new(),
         };
 
         let args = SpawnArgs {
             working_dir: self.config.working_dir.clone(),
             system_prompt: roles::system_prompt(self.id.role).to_string(),
             permission_mode: Some(roles::permission_mode(self.id.role).to_string()),
-            extra_args: Vec::new(),
+            extra_args,
             command_prefix,
         };
 
@@ -102,19 +110,27 @@ impl Agent {
     }
 
     /// Read all output from the process, forward to UI, and collect assistant text.
-    async fn consume_output(&self, rx: &mut mpsc::Receiver<ClaudeOutput>) -> String {
+    async fn consume_output(&mut self, rx: &mut mpsc::Receiver<ClaudeOutput>) -> String {
         let mut all_text = String::new();
 
         while let Some(output) = rx.recv().await {
             let _ = self.ui_tx.send((self.id.clone(), output.clone()));
 
-            if let ClaudeOutput::Assistant(ref asst) = output {
-                for block in &asst.message.content {
-                    if let ContentBlock::Text { text } = block {
-                        all_text.push_str(text);
-                        all_text.push('\n');
+            match &output {
+                ClaudeOutput::System(sys) => {
+                    if let Some(sid) = &sys.session_id {
+                        self.session_id = Some(sid.clone());
                     }
                 }
+                ClaudeOutput::Assistant(asst) => {
+                    for block in &asst.message.content {
+                        if let ContentBlock::Text { text } = block {
+                            all_text.push_str(text);
+                            all_text.push('\n');
+                        }
+                    }
+                }
+                _ => {}
             }
 
             if output.is_final() {
