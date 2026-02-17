@@ -5,7 +5,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::claude::process::{spawn_claude_process, send_prompt, SpawnArgs};
 use crate::claude::protocol::{ClaudeOutput, ContentBlock};
-use crate::sandbox::bwrap_command_prefix;
+use crate::sandbox::{bwrap_command_prefix, bwrap_readonly_prefix};
 
 use super::parser::extract_sections;
 use super::roles;
@@ -75,7 +75,7 @@ impl Agent {
     async fn process_prompt(&self, prompt: &str) -> Result<()> {
         let command_prefix = match &self.config.worktree_path {
             Some(path) => bwrap_command_prefix(path),
-            None => Vec::new(),
+            None => bwrap_readonly_prefix(),
         };
 
         let args = SpawnArgs {
@@ -156,6 +156,9 @@ fn format_prompt(msg: &AgentMessage) -> String {
         MessageKind::Info => "INFO",
         MessageKind::Evaluation => "EVALUATION",
         MessageKind::Observation => "OBSERVATION",
+        MessageKind::UserMessage => {
+            return format!("USER: {}", msg.content);
+        }
     };
 
     format!("{} from {}: {}", context, msg.from, msg.content)

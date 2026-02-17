@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use dioxus::prelude::*;
 
 use crate::claude::{SessionManager, convert_output};
-use crate::orchestrator::types::AgentId;
+use crate::orchestrator::types::{AgentId, AgentRole};
 use crate::orchestrator::OrchestratorRuntime;
 use crate::state::{
     OrchestratorRun, RunId, RunStatus, Session, SessionId, SessionStatus,
@@ -42,14 +42,14 @@ fn NewSessionButton() -> Element {
     let mut sessions: Signal<HashMap<SessionId, Session>> = use_context();
     let mut active_id: Signal<Option<SessionId>> = use_context();
     let mut manager: Signal<SessionManager> = use_context();
+    let project_path_signal: Signal<Option<PathBuf>> = use_context();
 
     rsx! {
         button {
             class: "btn btn-full",
             onclick: move |_| {
                 spawn(async move {
-                    let project_path: Signal<Option<PathBuf>> = use_context();
-                    let project_path = project_path().unwrap_or_default();
+                    let project_path = project_path_signal().unwrap_or_default();
                     let count = sessions.read().len() + 1;
                     let title = format!("Session {count}");
                     match manager.write().new_session(&project_path, &title).await {
@@ -179,137 +179,95 @@ fn OrchestratorSection() -> Element {
 
 #[component]
 fn NewRunButton() -> Element {
-    let mut show_input = use_signal(|| false);
-
-    rsx! {
-        if show_input() {
-            GoalInputForm { on_close: move |_| show_input.set(false) }
-        } else {
-            button {
-                class: "btn btn-full",
-                onclick: move |_| show_input.set(true),
-                "+ New Run"
-            }
-        }
-    }
-}
-
-#[component]
-fn GoalInputForm(on_close: EventHandler<()>) -> Element {
-    let mut goal_input = use_signal(|| String::new());
     let mut sessions: Signal<HashMap<SessionId, Session>> = use_context();
     let mut runs: Signal<Vec<OrchestratorRun>> = use_context();
     let mut active_id: Signal<Option<SessionId>> = use_context();
-
-    let mut submit = move || {
-        let goal = goal_input().trim().to_string();
-        if !goal.is_empty() {
-            start_run(goal, &mut sessions, &mut runs, &mut active_id);
-            goal_input.set(String::new());
-            on_close.call(());
-        }
-    };
+    let project_path_signal: Signal<Option<PathBuf>> = use_context();
 
     rsx! {
-        div {
-            class: "goal-form",
-            input {
-                class: "goal-input",
-                placeholder: "Goal for orchestrator...",
-                value: "{goal_input}",
-                oninput: move |evt| goal_input.set(evt.value()),
-                onkeydown: move |evt| {
-                    if evt.key() == Key::Enter {
-                        submit();
-                    } else if evt.key() == Key::Escape {
-                        goal_input.set(String::new());
-                        on_close.call(());
-                    }
-                },
-            }
-            div {
-                class: "goal-actions",
-                button {
-                    class: "btn btn-sm flex-1",
-                    onclick: move |_| submit(),
-                    "Start"
-                }
-                button {
-                    class: "btn btn-ghost btn-sm",
-                    onclick: move |_| {
-                        goal_input.set(String::new());
-                        on_close.call(());
-                    },
-                    "Cancel"
-                }
-            }
+        button {
+            class: "btn btn-full",
+            onclick: move |_| {
+                start_run(&mut sessions, &mut runs, &mut active_id, project_path_signal);
+            },
+            "+ New Run"
         }
     }
 }
 
 fn start_run(
-    goal: String,
     sessions: &mut Signal<HashMap<SessionId, Session>>,
     runs: &mut Signal<Vec<OrchestratorRun>>,
     active_id: &mut Signal<Option<SessionId>>,
+    project_path_signal: Signal<Option<PathBuf>>,
 ) {
-    let mut sessions = *sessions;
-    let mut runs = *runs;
-    let mut active_id = *active_id;
+    let project_path = project_path_signal().unwrap_or_default();
+    let run_id = RunId::new();
 
-    spawn(async move {
-        let project_path_signal: Signal<Option<PathBuf>> = use_context();
-        let project_path = project_path_signal().unwrap_or_default();
+    // Known agent roles — create sessions synchronously
+    let initial_agents = [
+        AgentId::new_singleton(AgentRole::Manager),
+        AgentId::new_singleton(AgentRole::Architect),
+        AgentId::new_singleton(AgentRole::Scorer),
+        AgentId::new_developer(0),
+    ];
 
-        let run_handle = match OrchestratorRuntime::spawn_run(
-            goal.clone(),
-            project_path.clone(),
-        )
-        .await
-        {
-            Ok(h) => h,
-            Err(e) => {
-                tracing::error!("Failed to start orchestrator run: {e}");
-                return;
-            }
-        };
-
-        let run_id = RunId::new();
-        let mut agent_sessions = HashMap::new();
-
-        // Create a session per agent
-        for agent_id in run_handle.agent_ids() {
+    let mut agent_sessions = HashMap::new();
+    {
+        let mut sessions_write = sessions.write();
+        for agent_id in &initial_agents {
             let session_id = SessionId::new();
             let session = Session {
                 id: session_id,
                 title: format!("{}", agent_id),
                 messages: Vec::new(),
-                status: SessionStatus::Running,
+                status: SessionStatus::Idle,
                 worktree_path: project_path.clone(),
                 project_path: project_path.clone(),
             };
-            sessions.write().insert(session_id, session);
+            sessions_write.insert(session_id, session);
             agent_sessions.insert(agent_id.clone(), session_id);
         }
+    }
 
-        // Select the first agent's session
-        if let Some(first_sid) = agent_sessions.values().next().copied() {
-            active_id.set(Some(first_sid));
-        }
+    // Select manager's session
+    if let Some(first_sid) = agent_sessions.get(&initial_agents[0]).copied() {
+        active_id.set(Some(first_sid));
+    }
 
-        // Subscribe before storing the run
+    // Store run immediately (no handle yet)
+    let run = OrchestratorRun {
+        id: run_id,
+        goal: String::new(),
+        agent_sessions: agent_sessions.clone(),
+        status: RunStatus::Running,
+        run_handle: None,
+    };
+    runs.write().push(run);
+
+    // Spawn orchestrator in background, wire up relay when ready
+    let mut sessions = *sessions;
+    let mut runs = *runs;
+    spawn(async move {
+        let run_handle = match OrchestratorRuntime::spawn_run(project_path).await {
+            Ok(h) => h,
+            Err(e) => {
+                tracing::error!("Failed to start orchestrator run: {e}");
+                mark_run_failed(&mut runs, &mut sessions, run_id, &agent_sessions, &e.to_string());
+                return;
+            }
+        };
+
         let rx = run_handle.subscribe();
 
-        let run = OrchestratorRun {
-            id: run_id,
-            goal,
-            agent_sessions: agent_sessions.clone(),
-            status: RunStatus::Running,
-            run_handle: Some(run_handle),
-        };
-        runs.write().push(run);
+        // Store handle on the run
+        {
+            let mut runs_write = runs.write();
+            if let Some(run) = runs_write.iter_mut().find(|r| r.id == run_id) {
+                run.run_handle = Some(run_handle);
+            }
+        }
 
-        // Background task: relay orchestrator output to sessions
         spawn_output_relay(rx, agent_sessions, sessions, runs, run_id);
     });
 }
@@ -350,6 +308,27 @@ fn spawn_output_relay(
         // Run finished — update status
         mark_run_completed(&mut runs, &mut sessions, run_id, &agent_sessions);
     });
+}
+
+fn mark_run_failed(
+    runs: &mut Signal<Vec<OrchestratorRun>>,
+    sessions: &mut Signal<HashMap<SessionId, Session>>,
+    run_id: RunId,
+    agent_sessions: &HashMap<AgentId, SessionId>,
+    reason: &str,
+) {
+    let mut runs_write = runs.write();
+    if let Some(run) = runs_write.iter_mut().find(|r| r.id == run_id) {
+        run.status = RunStatus::Failed(reason.to_string());
+    }
+    drop(runs_write);
+
+    let mut sessions_write = sessions.write();
+    for session_id in agent_sessions.values() {
+        if let Some(session) = sessions_write.get_mut(session_id) {
+            session.status = SessionStatus::Error(reason.to_string());
+        }
+    }
 }
 
 fn mark_run_completed(

@@ -3,9 +3,7 @@ use std::path::Path;
 use anyhow::{bail, Result};
 
 /// Build the bwrap command prefix for sandboxing a developer agent.
-///
-/// The returned Vec is meant to be passed as `SpawnArgs::command_prefix`,
-/// which `process.rs` prepends before the `claude` binary.
+/// Developer gets read-write access to the worktree only.
 pub fn bwrap_command_prefix(worktree_path: &Path) -> Vec<String> {
     let worktree = worktree_path.to_string_lossy();
     [
@@ -15,6 +13,24 @@ pub fn bwrap_command_prefix(worktree_path: &Path) -> Vec<String> {
         "--proc", "/proc",
         "--tmpfs", "/tmp",
         "--bind", &worktree, &worktree,
+        "--unshare-pid",
+        "--die-with-parent",
+        "--",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect()
+}
+
+/// Build a read-only bwrap sandbox for non-developer agents.
+/// No writable paths except /tmp (needed for Claude's temp files).
+pub fn bwrap_readonly_prefix() -> Vec<String> {
+    [
+        "bwrap",
+        "--ro-bind", "/", "/",
+        "--dev", "/dev",
+        "--proc", "/proc",
+        "--tmpfs", "/tmp",
         "--unshare-pid",
         "--die-with-parent",
         "--",

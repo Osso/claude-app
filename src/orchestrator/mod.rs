@@ -26,18 +26,13 @@ pub struct RunHandle {
     ui_tx: broadcast::Sender<(AgentId, ClaudeOutput)>,
     /// Abort all agents
     abort_tx: mpsc::Sender<()>,
-    /// Track which agents are alive
-    agent_ids: Vec<AgentId>,
+    /// Agent inbox senders for direct messaging
+    agent_inboxes: HashMap<AgentId, mpsc::Sender<AgentMessage>>,
     /// Runtime task handle
     runtime_handle: JoinHandle<()>,
 }
 
 impl RunHandle {
-    /// Get a list of active agent IDs at the time of creation.
-    pub fn agent_ids(&self) -> &[AgentId] {
-        &self.agent_ids
-    }
-
     /// Subscribe to the UI output stream for all agents.
     pub fn subscribe(&self) -> broadcast::Receiver<(AgentId, ClaudeOutput)> {
         self.ui_tx.subscribe()
@@ -48,9 +43,19 @@ impl RunHandle {
         let _ = self.abort_tx.try_send(());
     }
 
-    /// Check if the runtime task is still running.
-    pub fn is_running(&self) -> bool {
-        !self.runtime_handle.is_finished()
+    /// Send a user message to a specific agent.
+    pub fn send_to_agent(&self, agent_id: &AgentId, content: String) -> bool {
+        if let Some(tx) = self.agent_inboxes.get(agent_id) {
+            let msg = AgentMessage::new(
+                agent_id.clone(), // from (irrelevant for UserMessage)
+                agent_id.clone(),
+                MessageKind::UserMessage,
+                content,
+            );
+            tx.try_send(msg).is_ok()
+        } else {
+            false
+        }
     }
 }
 
@@ -81,10 +86,9 @@ pub struct OrchestratorRuntime {
 }
 
 impl OrchestratorRuntime {
-    /// Start an orchestrator run. Creates worktrees, spawns agents, sends the goal.
-    /// Returns a RunHandle for the caller.
+    /// Start an orchestrator run. Creates worktrees, spawns agents.
+    /// Returns a RunHandle for the caller. The user sends the goal via send_to_agent.
     pub async fn spawn_run(
-        goal: String,
         project_path: PathBuf,
     ) -> Result<RunHandle> {
         let (ui_tx, _) = broadcast::channel(256);
@@ -112,16 +116,9 @@ impl OrchestratorRuntime {
         runtime.spawn_singleton(AgentRole::Scorer).await?;
         runtime.spawn_developer(0).await?;
 
-        let agent_ids: Vec<AgentId> = runtime.agent_inboxes.keys().cloned().collect();
-
-        // Send initial goal to manager
-        let goal_msg = AgentMessage::new(
-            AgentId::new_singleton(AgentRole::Manager), // from self (bootstrap)
-            AgentId::new_singleton(AgentRole::Manager),
-            MessageKind::Info,
-            goal,
-        );
-        runtime.deliver_message(goal_msg);
+        // Clone inbox senders for RunHandle before runtime consumes them
+        let handle_inboxes: HashMap<AgentId, mpsc::Sender<AgentMessage>> =
+            runtime.agent_inboxes.clone();
 
         let runtime_handle = tokio::spawn(async move {
             if let Err(e) = runtime.run_loop().await {
@@ -132,7 +129,7 @@ impl OrchestratorRuntime {
         Ok(RunHandle {
             ui_tx,
             abort_tx,
-            agent_ids,
+            agent_inboxes: handle_inboxes,
             runtime_handle,
         })
     }

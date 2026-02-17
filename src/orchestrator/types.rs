@@ -68,6 +68,7 @@ pub enum MessageKind {
     Info,
     Evaluation,
     Observation,
+    UserMessage,
 }
 
 /// Message sent between agents via in-process channels
