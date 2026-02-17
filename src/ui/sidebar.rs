@@ -10,9 +10,6 @@ use crate::state::{
     OrchestratorRun, RunId, RunStatus, Session, SessionId, SessionStatus,
 };
 
-const SIDEBAR_BG: &str = "#16162a";
-const ACTIVE_BG: &str = "#2a2a4a";
-
 #[component]
 pub fn Sidebar() -> Element {
     let sessions: Signal<HashMap<SessionId, Session>> = use_context();
@@ -29,8 +26,11 @@ pub fn Sidebar() -> Element {
 
     rsx! {
         div {
-            style: "width: 250px; min-width: 250px; background: {SIDEBAR_BG}; display: flex; flex-direction: column; border-right: 1px solid #333;",
-            NewSessionButton {}
+            class: "sidebar",
+            div {
+                class: "sidebar-section",
+                NewSessionButton {}
+            }
             SessionList { entries, active }
             OrchestratorSection {}
         }
@@ -44,28 +44,25 @@ fn NewSessionButton() -> Element {
     let mut manager: Signal<SessionManager> = use_context();
 
     rsx! {
-        div {
-            style: "padding: 12px; border-bottom: 1px solid #333;",
-            button {
-                style: "width: 100%; padding: 8px; background: #333355; color: #e0e0e0; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;",
-                onclick: move |_| {
-                    spawn(async move {
-                        let project_path: Signal<Option<PathBuf>> = use_context();
-                        let project_path = project_path().unwrap_or_default();
-                        let count = sessions.read().len() + 1;
-                        let title = format!("Session {count}");
-                        match manager.write().new_session(&project_path, &title).await {
-                            Ok(session) => {
-                                let id = session.id;
-                                sessions.write().insert(id, session);
-                                active_id.set(Some(id));
-                            }
-                            Err(e) => tracing::error!("Failed to create session: {e}"),
+        button {
+            class: "btn btn-full",
+            onclick: move |_| {
+                spawn(async move {
+                    let project_path: Signal<Option<PathBuf>> = use_context();
+                    let project_path = project_path().unwrap_or_default();
+                    let count = sessions.read().len() + 1;
+                    let title = format!("Session {count}");
+                    match manager.write().new_session(&project_path, &title).await {
+                        Ok(session) => {
+                            let id = session.id;
+                            sessions.write().insert(id, session);
+                            active_id.set(Some(id));
                         }
-                    });
-                },
-                "+ New Session"
-            }
+                        Err(e) => tracing::error!("Failed to create session: {e}"),
+                    }
+                });
+            },
+            "+ New Session"
         }
     }
 }
@@ -81,7 +78,7 @@ fn SessionList(
 
     rsx! {
         div {
-            style: "flex: 1; overflow-y: auto; padding: 4px 0;",
+            class: "sidebar-list",
             for (id, title, status) in entries {
                 SessionEntry {
                     id,
@@ -114,20 +111,19 @@ fn SessionEntry(
     on_click: EventHandler<()>,
     on_close: EventHandler<()>,
 ) -> Element {
-    let bg = if is_active { ACTIVE_BG } else { "transparent" };
-    let text_weight = if is_active { "bold" } else { "normal" };
+    let active_class = if is_active { " active" } else { "" };
 
     rsx! {
         div {
-            style: "padding: 8px 12px; cursor: pointer; background: {bg}; display: flex; align-items: center; gap: 8px;",
+            class: "session-item{active_class}",
             onclick: move |_| on_click.call(()),
-            StatusDot { status: status.clone() }
+            StatusBadge { status: status.clone() }
             span {
-                style: "flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: {text_weight};",
+                class: "session-item-title",
                 "{title}"
             }
             span {
-                style: "color: #666; font-size: 0.8em; padding: 2px 4px; border-radius: 2px;",
+                class: "session-close",
                 onclick: move |evt| {
                     evt.stop_propagation();
                     on_close.call(());
@@ -139,17 +135,15 @@ fn SessionEntry(
 }
 
 #[component]
-fn StatusDot(status: SessionStatus) -> Element {
-    let color = match status {
-        SessionStatus::Idle => "#4caf50",
-        SessionStatus::Running => "#ffb74d",
-        SessionStatus::Error(_) => "#ff6b6b",
+fn StatusBadge(status: SessionStatus) -> Element {
+    let (class, label) = match status {
+        SessionStatus::Idle => ("badge badge-idle", "idle"),
+        SessionStatus::Running => ("badge badge-running", "run"),
+        SessionStatus::Error(_) => ("badge badge-error", "err"),
     };
 
     rsx! {
-        span {
-            style: "width: 8px; height: 8px; border-radius: 50%; background: {color}; flex-shrink: 0;",
-        }
+        span { class: class, "{label}" }
     }
 }
 
@@ -162,12 +156,21 @@ fn OrchestratorSection() -> Element {
 
     rsx! {
         div {
-            style: "border-top: 1px solid #333; display: flex; flex-direction: column;",
-            NewRunButton {}
+            class: "orchestrator-section",
             div {
-                style: "overflow-y: auto; max-height: 300px;",
+                class: "sidebar-section",
+                NewRunButton {}
+            }
+            div {
+                class: "orchestrator-runs",
                 for (idx, run) in runs_read.iter().enumerate() {
-                    RunEntry { run_idx: idx, run_id: run.id, goal: run.goal.clone(), status: run.status.clone(), agent_sessions: run.agent_sessions.clone() }
+                    RunEntry {
+                        run_idx: idx,
+                        run_id: run.id,
+                        goal: run.goal.clone(),
+                        status: run.status.clone(),
+                        agent_sessions: run.agent_sessions.clone(),
+                    }
                 }
             }
         }
@@ -179,16 +182,13 @@ fn NewRunButton() -> Element {
     let mut show_input = use_signal(|| false);
 
     rsx! {
-        div {
-            style: "padding: 12px;",
-            if show_input() {
-                GoalInputForm { on_close: move |_| show_input.set(false) }
-            } else {
-                button {
-                    style: "width: 100%; padding: 8px; background: #333355; color: #e0e0e0; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em;",
-                    onclick: move |_| show_input.set(true),
-                    "+ New Run"
-                }
+        if show_input() {
+            GoalInputForm { on_close: move |_| show_input.set(false) }
+        } else {
+            button {
+                class: "btn btn-full",
+                onclick: move |_| show_input.set(true),
+                "+ New Run"
             }
         }
     }
@@ -212,9 +212,9 @@ fn GoalInputForm(on_close: EventHandler<()>) -> Element {
 
     rsx! {
         div {
-            style: "display: flex; flex-direction: column; gap: 6px;",
+            class: "goal-form",
             input {
-                style: "width: 100%; padding: 6px; background: #222244; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; font-size: 0.85em; box-sizing: border-box;",
+                class: "goal-input",
                 placeholder: "Goal for orchestrator...",
                 value: "{goal_input}",
                 oninput: move |evt| goal_input.set(evt.value()),
@@ -228,14 +228,14 @@ fn GoalInputForm(on_close: EventHandler<()>) -> Element {
                 },
             }
             div {
-                style: "display: flex; gap: 4px;",
+                class: "goal-actions",
                 button {
-                    style: "flex: 1; padding: 6px; background: #333355; color: #e0e0e0; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em;",
+                    class: "btn btn-sm flex-1",
                     onclick: move |_| submit(),
                     "Start"
                 }
                 button {
-                    style: "padding: 6px 10px; background: transparent; color: #666; border: 1px solid #444; border-radius: 4px; cursor: pointer; font-size: 0.85em;",
+                    class: "btn btn-ghost btn-sm",
                     onclick: move |_| {
                         goal_input.set(String::new());
                         on_close.call(());
@@ -388,32 +388,35 @@ fn RunEntry(
     let mut runs: Signal<Vec<OrchestratorRun>> = use_context();
     let mut sessions: Signal<HashMap<SessionId, Session>> = use_context();
 
-    let status_color = match &status {
-        RunStatus::Running => "#4caf50",
-        RunStatus::Completed => "#888",
-        RunStatus::Failed(_) => "#ff6b6b",
+    let status_badge_class = match &status {
+        RunStatus::Running => "badge badge-running",
+        RunStatus::Completed => "badge badge-idle",
+        RunStatus::Failed(_) => "badge badge-error",
+    };
+    let status_label = match &status {
+        RunStatus::Running => "run",
+        RunStatus::Completed => "done",
+        RunStatus::Failed(_) => "fail",
     };
 
-    let toggle_icon = if expanded() { "v" } else { ">" };
+    let toggle_icon = if expanded() { "\u{25bc}" } else { "\u{25b6}" };
     let is_running = status == RunStatus::Running;
 
     rsx! {
         div {
-            style: "border-bottom: 1px solid #2a2a3a;",
+            class: "run-entry",
             div {
-                style: "padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;",
+                class: "run-header",
                 onclick: move |_| expanded.set(!expanded()),
-                span { style: "color: #666; font-size: 0.8em; width: 12px;", "{toggle_icon}" }
+                span { class: "toggle-icon", "{toggle_icon}" }
+                span { class: status_badge_class, "{status_label}" }
                 span {
-                    style: "width: 8px; height: 8px; border-radius: 50%; background: {status_color}; flex-shrink: 0;",
-                }
-                span {
-                    style: "flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85em;",
+                    class: "flex-1 truncate",
                     "{goal}"
                 }
                 if is_running {
                     span {
-                        style: "color: #ff6b6b; font-size: 0.8em; padding: 2px 6px; cursor: pointer;",
+                        class: "btn-danger-text",
                         onclick: move |evt| {
                             evt.stop_propagation();
                             abort_run(&mut runs, &mut sessions, run_idx);
@@ -439,7 +442,7 @@ fn RunAgentList(agent_sessions: HashMap<AgentId, SessionId>) -> Element {
 
     rsx! {
         div {
-            style: "padding-left: 20px;",
+            class: "collapsible-content",
             for (agent_id, session_id) in agents {
                 AgentEntry {
                     agent_id: agent_id.clone(),
@@ -495,21 +498,21 @@ fn AgentEntry(
     on_click: EventHandler<()>,
     on_reset: EventHandler<()>,
 ) -> Element {
-    let bg = if is_active { ACTIVE_BG } else { "transparent" };
+    let active_class = if is_active { " active" } else { "" };
     let label = format!("{agent_id}");
     let is_developer = label.starts_with("developer");
 
     rsx! {
         div {
-            style: "padding: 5px 8px; cursor: pointer; background: {bg}; display: flex; align-items: center; gap: 6px; font-size: 0.85em;",
+            class: "agent-entry{active_class}",
             onclick: move |_| on_click.call(()),
             span {
-                style: "flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;",
+                class: "agent-entry-label",
                 "{label}"
             }
             if is_developer {
                 span {
-                    style: "color: #666; font-size: 0.8em; padding: 1px 4px; cursor: pointer;",
+                    class: "btn-danger-text",
                     onclick: move |evt| {
                         evt.stop_propagation();
                         on_reset.call(());

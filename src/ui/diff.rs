@@ -21,7 +21,7 @@ pub fn render_assistant_text(text: &str) -> String {
             }
             TextPart::Code { lang, body } => {
                 if is_diff_content(body) {
-                    html.push_str("<pre style=\"margin:0;padding:4px;overflow-x:auto;\">");
+                    html.push_str("<pre class=\"diff-block\">");
                     render_diff_lines(body, &mut html);
                     html.push_str("</pre>");
                 } else {
@@ -135,18 +135,18 @@ fn is_diff_content(body: &str) -> bool {
         .any(|line| line.starts_with('+') || line.starts_with('-') || line.starts_with("@@"))
 }
 
-/// Render diff lines with colored backgrounds.
+/// Render diff lines with colored backgrounds via CSS classes.
 fn render_diff_lines(body: &str, html: &mut String) {
     for line in body.lines() {
         let escaped = escape_html(line);
         if line.starts_with("@@") {
-            html.push_str("<span style=\"display:block;background:#1a1a3a;\">");
+            html.push_str("<span class=\"diff-line diff-line-hunk\">");
         } else if line.starts_with('+') && !line.starts_with("+++") {
-            html.push_str("<span style=\"display:block;background:#1a3a1a;\">");
+            html.push_str("<span class=\"diff-line diff-line-add\">");
         } else if line.starts_with('-') && !line.starts_with("---") {
-            html.push_str("<span style=\"display:block;background:#3a1a1a;\">");
+            html.push_str("<span class=\"diff-line diff-line-del\">");
         } else {
-            html.push_str("<span style=\"display:block;\">");
+            html.push_str("<span class=\"diff-line\">");
         }
         html.push_str(&escaped);
         html.push_str("</span>");
@@ -170,7 +170,7 @@ fn render_code_block(
         }
     }
     // Fallback: plain monospace
-    html.push_str("<pre style=\"margin:0;padding:4px;overflow-x:auto;\"><code>");
+    html.push_str("<pre class=\"code-block\"><code>");
     html.push_str(&escape_html(body));
     html.push_str("</code></pre>");
 }
@@ -216,9 +216,9 @@ mod tests {
     fn diff_block_detected_and_colored() {
         let input = "```diff\n@@ -1,3 +1,3 @@\n-old line\n+new line\n context\n```";
         let result = render_assistant_text(input);
-        assert!(result.contains("background:#1a1a3a")); // @@ line
-        assert!(result.contains("background:#3a1a1a")); // - line
-        assert!(result.contains("background:#1a3a1a")); // + line
+        assert!(result.contains("diff-line-hunk")); // @@ line
+        assert!(result.contains("diff-line-del"));  // - line
+        assert!(result.contains("diff-line-add"));  // + line
     }
 
     #[test]
@@ -226,11 +226,11 @@ mod tests {
         let input = "```\n--- a/file.rs\n+++ b/file.rs\n-removed\n+added\n```";
         let result = render_assistant_text(input);
         // --- and +++ lines should NOT get diff coloring
-        assert!(result.contains("<span style=\"display:block;\">--- a/file.rs</span>"));
-        assert!(result.contains("<span style=\"display:block;\">+++ b/file.rs</span>"));
+        assert!(result.contains("<span class=\"diff-line\">--- a/file.rs</span>"));
+        assert!(result.contains("<span class=\"diff-line\">+++ b/file.rs</span>"));
         // But - and + lines should
-        assert!(result.contains("background:#3a1a1a"));
-        assert!(result.contains("background:#1a3a1a"));
+        assert!(result.contains("diff-line-del"));
+        assert!(result.contains("diff-line-add"));
     }
 
     #[test]

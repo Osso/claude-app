@@ -1,0 +1,583 @@
+/* ============================================================
+   Design Tokens — dark mode, kumo-ui inspired
+   ============================================================ */
+
+:root {
+  /* Surfaces */
+  --base: oklch(0% 0 0);
+  --elevated: oklch(14.5% 0 0);
+  --recessed: oklch(10% 0 0);
+  --overlay: oklch(26.9% 0 0);
+  --control: oklch(21% 0.006 286);
+  --tint: oklch(23% 0 0);
+
+  /* Text */
+  --text-default: oklch(97% 0 0);
+  --text-subtle: oklch(70.8% 0 0);
+  --text-inactive: oklch(55% 0 0);
+
+  /* Semantic */
+  --brand: oklch(57.7% 0.232 260);
+  --success: oklch(72.3% 0.219 150);
+  --warning: oklch(85.2% 0.199 92);
+  --danger: oklch(70.4% 0.191 22);
+
+  /* Borders */
+  --line: oklch(26.9% 0 0);
+  --ring: oklch(43.9% 0 0);
+
+  /* Sizing */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Typography */
+  --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", ui-monospace, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-lg: 15px;
+}
+
+/* ============================================================
+   Reset & base
+   ============================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--base);
+  color: var(--text-default);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+/* ============================================================
+   Drag region (borderless window handle)
+   ============================================================ */
+
+.drag-region {
+  height: 32px;
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   App layout
+   ============================================================ */
+
+.app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  background: var(--base);
+  color: var(--text-default);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  flex-direction: column;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ============================================================
+   Sidebar
+   ============================================================ */
+
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: var(--elevated);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-section {
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar-header {
+  font-size: var(--text-xs);
+  color: var(--text-inactive);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 8px 12px;
+}
+
+.sidebar-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+
+.btn {
+  background: var(--control);
+  color: var(--text-default);
+  border-radius: var(--radius-md);
+  padding: 6px 12px;
+  box-shadow: inset 0 0 0 1px var(--line);
+  border: none;
+  cursor: pointer;
+  transition: background 100ms ease;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+}
+
+.btn:hover {
+  background: var(--tint);
+}
+
+.btn-primary {
+  background: var(--brand);
+  color: white;
+  box-shadow: none;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.1);
+}
+
+.btn-ghost {
+  background: transparent;
+  box-shadow: none;
+}
+
+.btn-ghost:hover {
+  background: var(--tint);
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: var(--text-sm);
+}
+
+.btn-full {
+  width: 100%;
+}
+
+.btn-danger-text {
+  color: var(--danger);
+  background: transparent;
+  box-shadow: none;
+  font-size: var(--text-sm);
+  padding: 2px 6px;
+}
+
+.btn-danger-text:hover {
+  background: var(--tint);
+}
+
+/* ============================================================
+   Session items
+   ============================================================ */
+
+.session-item {
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.session-item:hover {
+  background: var(--tint);
+}
+
+.session-item.active {
+  background: var(--overlay);
+  font-weight: 500;
+}
+
+.session-item-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-close {
+  color: var(--text-inactive);
+  font-size: var(--text-sm);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.session-close:hover {
+  color: var(--danger);
+}
+
+/* ============================================================
+   Badges (status indicators)
+   ============================================================ */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+.badge-idle {
+  background: color-mix(in oklch, var(--success) 20%, transparent);
+  color: var(--success);
+}
+
+.badge-running {
+  background: color-mix(in oklch, var(--warning) 20%, transparent);
+  color: var(--warning);
+}
+
+.badge-error {
+  background: color-mix(in oklch, var(--danger) 20%, transparent);
+  color: var(--danger);
+}
+
+/* ============================================================
+   Chat area
+   ============================================================ */
+
+.chat-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-inactive);
+}
+
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* ============================================================
+   Messages
+   ============================================================ */
+
+.message {
+  padding: 8px 12px;
+  margin-bottom: 4px;
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+}
+
+.message-user {
+  background: var(--elevated);
+  border-left: 2px solid var(--brand);
+}
+
+.message-assistant {
+  color: var(--text-default);
+}
+
+.message-tool {
+  background: var(--recessed);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--line);
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.message-tool-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+  user-select: none;
+}
+
+.message-tool-header:hover {
+  background: var(--tint);
+}
+
+.message-tool-body {
+  padding: 8px;
+  border-top: 1px solid var(--line);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+}
+
+.message-tool-error {
+  color: var(--danger);
+}
+
+.message-system {
+  color: var(--text-inactive);
+  font-size: var(--text-xs);
+  padding: 4px 12px;
+}
+
+.message-error {
+  color: var(--danger);
+  background: color-mix(in oklch, var(--danger) 10%, transparent);
+  font-weight: bold;
+}
+
+/* ============================================================
+   Prompt area
+   ============================================================ */
+
+.prompt-area {
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.prompt-input {
+  width: 100%;
+  background: var(--control);
+  color: var(--text-default);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 0 1px var(--line);
+  resize: none;
+  border: none;
+  outline: none;
+  min-height: 60px;
+  max-height: 200px;
+  resize: vertical;
+}
+
+.prompt-input:focus {
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.prompt-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   Project picker
+   ============================================================ */
+
+.project-picker {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.project-picker-label {
+  font-size: var(--text-lg);
+  color: var(--text-subtle);
+}
+
+.project-picker-input {
+  width: 500px;
+  max-width: 80%;
+  padding: 10px;
+  background: var(--control);
+  color: var(--text-default);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+}
+
+.project-picker-input:focus {
+  box-shadow: inset 0 0 0 1px var(--ring);
+  outline: none;
+}
+
+/* ============================================================
+   Collapsible / Orchestrator
+   ============================================================ */
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.collapsible-content {
+  border-left: 2px solid var(--line);
+  margin-left: 12px;
+  padding-left: 8px;
+}
+
+.orchestrator-section {
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+}
+
+.orchestrator-runs {
+  overflow-y: auto;
+  max-height: 300px;
+}
+
+.run-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.run-entry {
+  border-bottom: 1px solid var(--line);
+}
+
+.agent-entry {
+  padding: 4px 8px 4px 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.agent-entry:hover {
+  background: var(--tint);
+}
+
+.agent-entry.active {
+  background: var(--overlay);
+}
+
+.agent-entry-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Goal input form
+   ============================================================ */
+
+.goal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.goal-input {
+  width: 100%;
+  padding: 6px;
+  background: var(--control);
+  color: var(--text-default);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+}
+
+.goal-input:focus {
+  box-shadow: inset 0 0 0 1px var(--ring);
+  outline: none;
+}
+
+.goal-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* ============================================================
+   Diff highlighting
+   ============================================================ */
+
+.diff-block {
+  margin: 0;
+  padding: 4px;
+  overflow-x: auto;
+}
+
+.diff-line {
+  display: block;
+}
+
+.diff-line-hunk {
+  background: color-mix(in oklch, var(--brand) 15%, transparent);
+}
+
+.diff-line-add {
+  background: color-mix(in oklch, var(--success) 15%, transparent);
+}
+
+.diff-line-del {
+  background: color-mix(in oklch, var(--danger) 15%, transparent);
+}
+
+.code-block {
+  margin: 0;
+  padding: 4px;
+  overflow-x: auto;
+}
+
+/* ============================================================
+   Utility classes
+   ============================================================ */
+
+.text-xs {
+  font-size: var(--text-xs);
+}
+
+.text-sm {
+  font-size: var(--text-sm);
+}
+
+.text-subtle {
+  color: var(--text-subtle);
+}
+
+.text-inactive {
+  color: var(--text-inactive);
+}
+
+.toggle-icon {
+  color: var(--text-inactive);
+  font-size: var(--text-sm);
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

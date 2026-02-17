@@ -14,9 +14,9 @@ pub fn PromptInput(disabled: bool, on_submit: EventHandler<String>) -> Element {
 
     rsx! {
         div {
-            style: "padding: 8px; border-top: 1px solid #333;",
+            class: "prompt-area",
             textarea {
-                style: "width: 100%; min-height: 60px; max-height: 200px; background: #252535; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; padding: 8px; font-family: monospace; font-size: 0.95em; resize: vertical; box-sizing: border-box;",
+                class: "prompt-input",
                 disabled: disabled,
                 placeholder: if disabled { "Waiting for response..." } else { "Type a message... (Enter to send, Shift+Enter for newline)" },
                 value: "{text}",

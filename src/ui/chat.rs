@@ -18,19 +18,13 @@ pub fn ChatFeed() -> Element {
 
     let Some(session_id) = active else {
         return rsx! {
-            div {
-                style: "flex: 1; display: flex; align-items: center; justify-content: center; color: #666;",
-                "No session selected"
-            }
+            div { class: "chat-empty", "No session selected" }
         };
     };
 
     let Some(session) = sessions_read.get(&session_id) else {
         return rsx! {
-            div {
-                style: "flex: 1; display: flex; align-items: center; justify-content: center; color: #666;",
-                "Session not found"
-            }
+            div { class: "chat-empty", "Session not found" }
         };
     };
 
@@ -47,7 +41,7 @@ pub fn ChatFeed() -> Element {
 
     rsx! {
         div {
-            style: "flex: 1; display: flex; flex-direction: column; min-width: 0;",
+            class: "chat-area",
             MessageList { messages }
             PromptInput {
                 disabled: is_running,
@@ -64,7 +58,7 @@ fn MessageList(messages: Vec<Message>) -> Element {
     rsx! {
         div {
             id: "chat-messages",
-            style: "flex: 1; overflow-y: auto; padding: 12px;",
+            class: "message-list",
             for (i, msg) in messages.into_iter().enumerate() {
                 MessageView { key: "{i}", message: msg }
             }

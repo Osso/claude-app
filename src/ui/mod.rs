@@ -30,12 +30,16 @@ pub fn App() -> Element {
 
     rsx! {
         div {
-            style: "display: flex; height: 100vh; width: 100vw; background: #1a1a2e; color: #e0e0e0; font-family: monospace; font-size: 14px;",
-            if project_path().is_some() {
-                Sidebar {}
-                ChatFeed {}
-            } else {
-                ProjectPicker {}
+            class: "app",
+            div { class: "drag-region" }
+            div {
+                class: "app-body",
+                if project_path().is_some() {
+                    Sidebar {}
+                    ChatFeed {}
+                } else {
+                    ProjectPicker {}
+                }
             }
         }
     }
@@ -53,13 +57,13 @@ fn ProjectPicker() -> Element {
 
     rsx! {
         div {
-            style: "flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;",
+            class: "project-picker",
             div {
-                style: "font-size: 1.2em; color: #888;",
+                class: "project-picker-label",
                 "Select a project directory"
             }
             input {
-                style: "width: 500px; max-width: 80%; padding: 10px; background: #222244; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; font-family: monospace; font-size: 0.95em;",
+                class: "project-picker-input",
                 value: "{input_value}",
                 oninput: move |evt| input_value.set(evt.value()),
                 onkeydown: move |evt| {
@@ -72,7 +76,7 @@ fn ProjectPicker() -> Element {
                 },
             }
             button {
-                style: "padding: 10px 24px; background: #333355; color: #e0e0e0; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95em;",
+                class: "btn btn-primary",
                 onclick: move |_| {
                     let path = PathBuf::from(input_value().trim().to_string());
                     if path.is_dir() {

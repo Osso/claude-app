@@ -2,12 +2,6 @@ use dioxus::prelude::*;
 
 use crate::state::Message;
 
-const USER_BG: &str = "#2a2a3a";
-const ERROR_COLOR: &str = "#ff6b6b";
-const SYSTEM_COLOR: &str = "#888888";
-const TOOL_HEADER_BG: &str = "#252535";
-const MSG_PADDING: &str = "8px 12px";
-
 #[component]
 pub fn MessageView(message: Message) -> Element {
     match message {
@@ -29,7 +23,7 @@ pub fn MessageView(message: Message) -> Element {
 fn UserMessage(text: String) -> Element {
     rsx! {
         div {
-            style: "background: {USER_BG}; padding: {MSG_PADDING}; border-radius: 4px; margin: 4px 0; white-space: pre-wrap;",
+            class: "message message-user",
             "{text}"
         }
     }
@@ -39,7 +33,7 @@ fn UserMessage(text: String) -> Element {
 fn AssistantMessage(text: String) -> Element {
     rsx! {
         div {
-            style: "padding: {MSG_PADDING}; margin: 4px 0; font-family: monospace; white-space: pre-wrap;",
+            class: "message message-assistant",
             "{text}"
         }
     }
@@ -52,15 +46,16 @@ fn ToolUseMessage(name: String, input: String) -> Element {
 
     rsx! {
         div {
-            style: "margin: 4px 0; border-radius: 4px; overflow: hidden;",
+            class: "message-tool",
             div {
-                style: "background: {TOOL_HEADER_BG}; padding: 4px 12px; cursor: pointer; font-size: 0.9em; user-select: none;",
+                class: "message-tool-header",
                 onclick: move |_| expanded.set(!expanded()),
-                "[{name}] {arrow}"
+                span { class: "toggle-icon", "{arrow}" }
+                span { "{name}" }
             }
             if expanded() {
                 div {
-                    style: "padding: 8px 12px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap; background: #1e1e2e;",
+                    class: "message-tool-body",
                     "{input}"
                 }
             }
@@ -72,20 +67,25 @@ fn ToolUseMessage(name: String, input: String) -> Element {
 fn ToolResultMessage(output: String, is_error: bool) -> Element {
     let mut expanded = use_signal(|| false);
     let header = if is_error { "Error" } else { "Result" };
-    let header_color = if is_error { ERROR_COLOR } else { "#aaaaaa" };
+    let header_class = if is_error {
+        "message-tool-header message-tool-error"
+    } else {
+        "message-tool-header"
+    };
     let arrow = if expanded() { "\u{25bc}" } else { "\u{25b6}" };
 
     rsx! {
         div {
-            style: "margin: 4px 0; border-radius: 4px; overflow: hidden;",
+            class: "message-tool",
             div {
-                style: "background: {TOOL_HEADER_BG}; padding: 4px 12px; cursor: pointer; font-size: 0.9em; color: {header_color}; user-select: none;",
+                class: header_class,
                 onclick: move |_| expanded.set(!expanded()),
-                "{header} {arrow}"
+                span { class: "toggle-icon", "{arrow}" }
+                span { "{header}" }
             }
             if expanded() {
                 div {
-                    style: "padding: 8px 12px; font-family: monospace; font-size: 0.85em; white-space: pre-wrap; background: #1e1e2e;",
+                    class: "message-tool-body",
                     "{output}"
                 }
             }
@@ -102,7 +102,7 @@ fn SystemMessage(session_id: Option<String>) -> Element {
 
     rsx! {
         div {
-            style: "padding: 2px 12px; color: {SYSTEM_COLOR}; font-size: 0.85em;",
+            class: "message-system",
             "{text}"
         }
     }
@@ -112,7 +112,7 @@ fn SystemMessage(session_id: Option<String>) -> Element {
 fn ErrorMessage(text: String) -> Element {
     rsx! {
         div {
-            style: "padding: {MSG_PADDING}; color: {ERROR_COLOR}; font-weight: bold;",
+            class: "message message-error",
             "{text}"
         }
     }
