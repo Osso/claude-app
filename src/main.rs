@@ -1,3 +1,4 @@
+mod api;
 mod claude;
 mod orchestrator;
 mod sandbox;
@@ -7,6 +8,15 @@ mod worktree;
 
 fn main() {
     tracing_subscriber::fmt::init();
+
+    // Spawn API server on a background thread with its own tokio runtime
+    // so it doesn't block the Dioxus event loop
+    let project_path = std::env::current_dir().expect("failed to get current directory");
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("failed to create API runtime");
+        rt.block_on(api::start_server(project_path));
+    });
+
     dioxus::LaunchBuilder::desktop()
         .with_cfg(
             dioxus::desktop::Config::new()

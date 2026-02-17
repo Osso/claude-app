@@ -3,12 +3,14 @@ pub mod orchestrator;
 use std::fmt;
 use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
 pub use orchestrator::{OrchestratorRun, RunId, RunStatus};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct SessionId(Uuid);
 
 impl SessionId {
@@ -23,7 +25,7 @@ impl fmt::Display for SessionId {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub enum Message {
     User { text: String },
     Assistant { text: String },
@@ -47,14 +49,14 @@ impl PartialEq for Message {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum SessionStatus {
     Idle,
     Running,
     Error(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct Session {
     pub id: SessionId,
     pub title: String,

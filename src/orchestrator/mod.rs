@@ -59,6 +59,44 @@ impl RunHandle {
     }
 }
 
+#[cfg(test)]
+impl RunHandle {
+    /// Create a test handle with fresh channels. Returns:
+    /// - the RunHandle itself
+    /// - abort_rx: mpsc::Receiver<()> -- recv to verify abort was called
+    /// - agent_inboxes_rx: HashMap<AgentId, mpsc::Receiver<AgentMessage>> -- recv to verify messages
+    pub fn new_test(
+        agent_ids: Vec<AgentId>,
+    ) -> (
+        Self,
+        mpsc::Receiver<()>,
+        HashMap<AgentId, mpsc::Receiver<AgentMessage>>,
+    ) {
+        let (ui_tx, _) = broadcast::channel(16);
+        let (abort_tx, abort_rx) = mpsc::channel(1);
+        let mut agent_inboxes = HashMap::new();
+        let mut inbox_receivers = HashMap::new();
+
+        for id in agent_ids {
+            let (tx, rx) = mpsc::channel(16);
+            agent_inboxes.insert(id.clone(), tx);
+            inbox_receivers.insert(id, rx);
+        }
+
+        // Spawn a no-op task for runtime_handle
+        let runtime_handle = tokio::spawn(async {});
+
+        let handle = Self {
+            ui_tx,
+            abort_tx,
+            agent_inboxes,
+            runtime_handle,
+        };
+
+        (handle, abort_rx, inbox_receivers)
+    }
+}
+
 /// Mutable state tracked by the runtime
 struct RuntimeState {
     developer_count: u8,

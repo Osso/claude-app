@@ -1,6 +1,7 @@
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AgentRole {
     Manager,
     Architect,
@@ -28,7 +29,7 @@ impl std::fmt::Display for AgentRole {
 /// Unique identifier for an agent instance.
 /// Singletons (manager, architect, scorer) use index 0.
 /// Developers use index 0-2 for multi-developer support.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AgentId {
     pub role: AgentRole,
     pub index: u8,

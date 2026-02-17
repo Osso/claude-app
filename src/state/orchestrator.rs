@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::orchestrator::types::AgentId;
@@ -8,7 +9,8 @@ use crate::orchestrator::RunHandle;
 
 use super::SessionId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct RunId(Uuid);
 
 impl RunId {
@@ -23,7 +25,7 @@ impl fmt::Display for RunId {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum RunStatus {
     Running,
     Completed,
