@@ -43,6 +43,11 @@ impl RunHandle {
         let _ = self.abort_tx.try_send(());
     }
 
+    /// Return the IDs of all agents in this run.
+    pub fn agent_ids(&self) -> Vec<AgentId> {
+        self.agent_inboxes.keys().cloned().collect()
+    }
+
     /// Send a user message to a specific agent.
     pub fn send_to_agent(&self, agent_id: &AgentId, content: String) -> bool {
         if let Some(tx) = self.agent_inboxes.get(agent_id) {

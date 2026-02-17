@@ -57,6 +57,7 @@ pub struct RunDetail {
     pub id: RunId,
     pub goal: String,
     pub status: RunStatus,
+    pub agents: Vec<AgentId>,
     pub agent_sessions: HashMap<AgentId, SessionId>,
 }
 

@@ -70,10 +70,17 @@ pub async fn get_run(
     let runs = state.runs.read().await;
     let run = runs.get(&id).ok_or(StatusCode::NOT_FOUND)?;
 
+    let agents = run
+        .run_handle
+        .as_ref()
+        .map(|h| h.agent_ids())
+        .unwrap_or_default();
+
     Ok(Json(RunDetail {
         id: run.id,
         goal: run.goal.clone(),
         status: run.status.clone(),
+        agents,
         agent_sessions: run.agent_sessions.clone(),
     }))
 }
