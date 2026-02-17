@@ -379,7 +379,7 @@ body {
 }
 
 /* ============================================================
-   Project picker
+   Project picker (full-page, initial state)
    ============================================================ */
 
 .project-picker {
@@ -387,24 +387,80 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
+  padding-top: 15vh;
+  gap: 32px;
 }
 
-.project-picker-label {
-  font-size: var(--text-lg);
+.project-picker-title {
+  font-size: 20px;
   color: var(--text-subtle);
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  font-weight: 300;
+}
+
+.project-picker-section {
+  font-size: var(--text-xs);
+  color: var(--text-inactive);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0 12px 8px;
+}
+
+.project-picker-recent {
+  width: 520px;
+  max-width: 85%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-picker-item {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+  border-left: 2px solid transparent;
+}
+
+.project-picker-item:hover {
+  background: var(--elevated);
+  border-left-color: var(--brand);
+}
+
+.project-picker-item-name {
+  font-size: var(--text-lg);
+  color: var(--text-default);
+  font-weight: 500;
+}
+
+.project-picker-item-path {
+  font-size: var(--text-xs);
+  color: var(--text-inactive);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-picker-manual {
+  width: 520px;
+  max-width: 85%;
+}
+
+.project-picker-input-row {
+  display: flex;
+  gap: 8px;
 }
 
 .project-picker-input {
-  width: 500px;
-  max-width: 80%;
-  padding: 10px;
+  flex: 1;
+  padding: 10px 12px;
   background: var(--control);
   color: var(--text-default);
   border: none;
   box-shadow: inset 0 0 0 1px var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-family: var(--font-mono);
   font-size: var(--text-base);
 }
@@ -412,6 +468,120 @@ body {
 .project-picker-input:focus {
   box-shadow: inset 0 0 0 1px var(--ring);
   outline: none;
+}
+
+/* ============================================================
+   Project switcher (sidebar dropdown)
+   ============================================================ */
+
+.project-switcher {
+  border-bottom: 1px solid var(--line);
+}
+
+.project-switcher-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.project-switcher-header:hover {
+  background: var(--tint);
+}
+
+.project-switcher-toggle {
+  color: var(--text-inactive);
+  font-size: var(--text-sm);
+  flex-shrink: 0;
+  width: 12px;
+}
+
+.project-switcher-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.project-switcher-name {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-default);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher-path {
+  font-size: var(--text-xs);
+  color: var(--text-inactive);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher-dropdown {
+  border-top: 1px solid var(--line);
+  background: var(--recessed);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.project-switcher-filter {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--control);
+  color: var(--text-default);
+  border: none;
+  box-shadow: inset 0 0 0 1px var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.project-switcher-filter:focus {
+  box-shadow: inset 0 0 0 1px var(--ring);
+  outline: none;
+}
+
+.project-switcher-list {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.project-switcher-item {
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 100ms ease;
+  border-left: 2px solid transparent;
+}
+
+.project-switcher-item:hover {
+  background: var(--tint);
+}
+
+.project-switcher-item.current {
+  border-left-color: var(--brand);
+  background: color-mix(in oklch, var(--brand) 8%, transparent);
+}
+
+.project-switcher-item-name {
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.project-switcher-item-path {
+  font-size: var(--text-xs);
+  color: var(--text-inactive);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============================================================

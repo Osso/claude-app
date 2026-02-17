@@ -10,6 +10,8 @@ use crate::state::{
     OrchestratorRun, RunId, RunStatus, Session, SessionId, SessionStatus,
 };
 
+use super::projects::ProjectSwitcher;
+
 #[component]
 pub fn Sidebar() -> Element {
     let sessions: Signal<HashMap<SessionId, Session>> = use_context();
@@ -27,6 +29,7 @@ pub fn Sidebar() -> Element {
     rsx! {
         div {
             class: "sidebar",
+            ProjectSwitcher {}
             div {
                 class: "sidebar-section",
                 NewSessionButton {}

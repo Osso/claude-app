@@ -1,6 +1,7 @@
 mod chat;
 pub mod diff;
 mod message;
+mod projects;
 mod prompt;
 mod sidebar;
 
@@ -13,6 +14,7 @@ use crate::claude::SessionManager;
 use crate::state::{OrchestratorRun, Session, SessionId};
 
 use self::chat::ChatFeed;
+use self::projects::ProjectPicker;
 use self::sidebar::Sidebar;
 
 #[component]
@@ -45,46 +47,3 @@ pub fn App() -> Element {
     }
 }
 
-#[component]
-fn ProjectPicker() -> Element {
-    let mut project_path: Signal<Option<PathBuf>> = use_context();
-    let mut input_value = use_signal(|| {
-        std::env::current_dir()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string()
-    });
-
-    rsx! {
-        div {
-            class: "project-picker",
-            div {
-                class: "project-picker-label",
-                "Select a project directory"
-            }
-            input {
-                class: "project-picker-input",
-                value: "{input_value}",
-                oninput: move |evt| input_value.set(evt.value()),
-                onkeydown: move |evt| {
-                    if evt.key() == Key::Enter {
-                        let path = PathBuf::from(input_value().trim().to_string());
-                        if path.is_dir() {
-                            project_path.set(Some(path));
-                        }
-                    }
-                },
-            }
-            button {
-                class: "btn btn-primary",
-                onclick: move |_| {
-                    let path = PathBuf::from(input_value().trim().to_string());
-                    if path.is_dir() {
-                        project_path.set(Some(path));
-                    }
-                },
-                "Open"
-            }
-        }
-    }
-}
