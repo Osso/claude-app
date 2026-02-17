@@ -2,42 +2,58 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 
+/// Resolve the Claude config directory (~/.claude) that must be writable
+/// for the CLI to function (session state, lock files).
+fn claude_config_dir() -> String {
+    dirs::home_dir()
+        .map(|h| h.join(".claude"))
+        .unwrap_or_else(|| "/tmp/.claude".into())
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// Build the bwrap command prefix for sandboxing a developer agent.
 /// Developer gets read-write access to the worktree only.
 pub fn bwrap_command_prefix(worktree_path: &Path) -> Vec<String> {
     let worktree = worktree_path.to_string_lossy();
-    [
+    let claude_dir = claude_config_dir();
+    let mut args: Vec<String> = [
         "bwrap",
         "--ro-bind", "/", "/",
         "--dev", "/dev",
         "--proc", "/proc",
         "--tmpfs", "/tmp",
         "--bind", &worktree, &worktree,
-        "--unshare-pid",
-        "--die-with-parent",
-        "--",
     ]
     .iter()
     .map(|s| s.to_string())
-    .collect()
+    .collect();
+
+    // Claude CLI needs write access to ~/.claude for session state
+    args.extend(["--bind".into(), claude_dir.clone(), claude_dir]);
+    args.extend(["--unshare-pid".into(), "--die-with-parent".into(), "--".into()]);
+    args
 }
 
 /// Build a read-only bwrap sandbox for non-developer agents.
-/// No writable paths except /tmp (needed for Claude's temp files).
+/// No writable paths except /tmp and ~/.claude (needed for Claude's session state).
 pub fn bwrap_readonly_prefix() -> Vec<String> {
-    [
+    let claude_dir = claude_config_dir();
+    let mut args: Vec<String> = [
         "bwrap",
         "--ro-bind", "/", "/",
         "--dev", "/dev",
         "--proc", "/proc",
         "--tmpfs", "/tmp",
-        "--unshare-pid",
-        "--die-with-parent",
-        "--",
     ]
     .iter()
     .map(|s| s.to_string())
-    .collect()
+    .collect();
+
+    // Claude CLI needs write access to ~/.claude for session state
+    args.extend(["--bind".into(), claude_dir.clone(), claude_dir]);
+    args.extend(["--unshare-pid".into(), "--die-with-parent".into(), "--".into()]);
+    args
 }
 
 /// Check whether the `bwrap` binary is available in PATH.
@@ -74,6 +90,12 @@ mod tests {
         assert_eq!(prefix[0], "bwrap");
         assert!(prefix.contains(&"--ro-bind".to_string()));
         assert!(prefix.contains(&"/home/user/worktrees/session-1".to_string()));
+        // Must include writable ~/.claude for Claude CLI session state
+        let bind_positions: Vec<_> = prefix.iter().enumerate()
+            .filter(|(_, s)| s.as_str() == "--bind")
+            .map(|(i, _)| i)
+            .collect();
+        assert!(bind_positions.len() >= 2, "need --bind for worktree and .claude");
         assert_eq!(prefix.last().unwrap(), "--");
     }
 
