@@ -11,11 +11,12 @@ pub fn system_prompt(role: AgentRole) -> &'static str {
 }
 
 /// Permission mode for the Claude CLI `--permission-mode` flag.
-/// Developers auto-accept edits. Others use dontAsk mode which auto-denies
-/// tool uses that aren't pre-approved (read-only tools work without approval).
+/// Non-developers use bypassPermissions — bwrap read-only sandbox is the real
+/// security boundary. `plan` mode forces plan-only output (unusable for agents),
+/// `dontAsk` auto-approves everything (misleading name).
 pub fn permission_mode(role: AgentRole) -> &'static str {
     match role {
         AgentRole::Developer => "acceptEdits",
-        AgentRole::Manager | AgentRole::Architect | AgentRole::Scorer => "dontAsk",
+        AgentRole::Manager | AgentRole::Architect | AgentRole::Scorer => "bypassPermissions",
     }
 }

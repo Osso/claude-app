@@ -32,21 +32,57 @@ pub async fn create_worktree(repo_path: &Path, name: &str) -> Result<PathBuf> {
     let worktree_path = worktree_base(&repo_path).join(name);
     let branch_name = format!("claude-sessions/{name}");
 
+    // If worktree already exists from a previous run, reset and reuse it
+    if worktree_path.exists() {
+        reset_worktree(&worktree_path).await.ok();
+        return Ok(worktree_path);
+    }
+
     tokio::fs::create_dir_all(worktree_path.parent().unwrap())
         .await
         .context("create worktree parent directories")?;
 
+    // Try creating with new branch first
     let output = Command::new("git")
         .arg("-C")
         .arg(&repo_path)
-        .arg("worktree")
-        .arg("add")
+        .args(["worktree", "add"])
         .arg(&worktree_path)
-        .arg("-b")
-        .arg(&branch_name)
+        .args(["-b", &branch_name])
         .output()
         .await
         .context("spawn git worktree add")?;
+
+    if output.status.success() {
+        return Ok(worktree_path);
+    }
+
+    // Branch might exist from a stale worktree — prune and retry
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["worktree", "prune"])
+        .output()
+        .await;
+
+    // Delete stale branch
+    let _ = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["branch", "-D", &branch_name])
+        .output()
+        .await;
+
+    // Retry
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(&repo_path)
+        .args(["worktree", "add"])
+        .arg(&worktree_path)
+        .args(["-b", &branch_name])
+        .output()
+        .await
+        .context("spawn git worktree add (retry)")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

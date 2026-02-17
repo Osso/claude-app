@@ -252,7 +252,7 @@ fn start_run(
         let run_handle = match OrchestratorRuntime::spawn_run(project_path).await {
             Ok(h) => h,
             Err(e) => {
-                tracing::error!("Failed to start orchestrator run: {e}");
+                tracing::error!("Failed to start orchestrator run: {e:#}");
                 mark_run_failed(&mut runs, &mut sessions, run_id, &agent_sessions, &e.to_string());
                 return;
             }
