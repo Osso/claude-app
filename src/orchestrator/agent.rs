@@ -91,7 +91,8 @@ impl Agent {
         send_prompt(stdin, prompt).await.context("send prompt")?;
 
         let all_text = self.consume_output(&mut process.rx).await;
-        process.wait().await.ok();
+        // Kill immediately — Claude CLI hangs after final output (MCP server cleanup)
+        process.abort();
 
         let sections = extract_sections(&all_text);
         let parsed = route_sections(&self.id, sections);

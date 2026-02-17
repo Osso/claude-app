@@ -108,10 +108,14 @@ fn build_and_spawn(args: &SpawnArgs) -> Result<Child> {
         cmd.arg(arg);
     }
 
+    // Prevent "nested session" error if parent has CLAUDECODE set
+    cmd.env_remove("CLAUDECODE");
+
     cmd.current_dir(&args.working_dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+
 
     cmd.spawn()
         .with_context(|| format!("Failed to spawn claude process via '{program}'"))
