@@ -13,7 +13,7 @@ pub struct WorktreeInfo {
     pub head: String,
 }
 
-fn project_hash(repo_path: &Path) -> String {
+pub fn project_hash(repo_path: &Path) -> String {
     let mut hasher = DefaultHasher::new();
     repo_path.hash(&mut hasher);
     let hash = hasher.finish();

@@ -10,7 +10,7 @@ use crate::sandbox::{bwrap_command_prefix, bwrap_readonly_prefix};
 use super::parser::extract_sections;
 use super::roles;
 use super::routing::{ParsedOutput, route_sections};
-use super::types::{AgentId, AgentMessage, MessageKind, RuntimeCommand};
+use super::types::{AgentId, AgentMessage, AgentRole, MessageKind, RuntimeCommand};
 
 /// Outgoing item from an agent: either a routed message or a runtime command.
 pub enum AgentOutput {
@@ -20,9 +20,12 @@ pub enum AgentOutput {
 
 /// Configuration for spawning an agent
 pub struct AgentConfig {
+    /// The project path Claude sees as its working directory.
     pub working_dir: PathBuf,
-    /// For developers: bwrap worktree path. None for non-sandboxed agents.
-    pub worktree_path: Option<PathBuf>,
+    /// For developers: (worktree_path, project_path) for bwrap bind mount.
+    /// The worktree is mounted at the project path inside bwrap so Claude
+    /// writes to the worktree when it targets the project path.
+    pub worktree_bind: Option<(PathBuf, PathBuf)>,
 }
 
 /// A running agent that receives messages, sends them to Claude, and routes output.
@@ -76,8 +79,8 @@ impl Agent {
     }
 
     async fn process_prompt(&mut self, prompt: &str) -> Result<()> {
-        let command_prefix = match &self.config.worktree_path {
-            Some(path) => bwrap_command_prefix(path),
+        let command_prefix = match &self.config.worktree_bind {
+            Some((worktree, project)) => bwrap_command_prefix(worktree, project),
             None => bwrap_readonly_prefix(),
         };
 
@@ -104,7 +107,21 @@ impl Agent {
 
         let sections = extract_sections(&all_text);
         let parsed = route_sections(&self.id, sections);
-        dispatch_parsed(&self.outgoing_tx, parsed).await;
+
+        // If a developer produced output but no routable sections, send a
+        // synthetic completion to the manager so it's never left hanging.
+        if parsed.is_empty() && self.id.role == AgentRole::Developer && !all_text.trim().is_empty() {
+            tracing::warn!("Developer {} produced no routable sections, sending synthetic completion", self.id);
+            let msg = AgentMessage::new(
+                self.id.clone(),
+                AgentId::new_singleton(AgentRole::Manager),
+                MessageKind::TaskComplete,
+                all_text,
+            );
+            let _ = self.outgoing_tx.send(AgentOutput::Message(msg)).await;
+        } else {
+            dispatch_parsed(&self.outgoing_tx, parsed).await;
+        }
 
         Ok(())
     }

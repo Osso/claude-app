@@ -98,7 +98,16 @@ fn open_project(
     runs.write().clear();
 
     save_recent(&path);
+    let path_clone = path.clone();
     project_path.set(Some(path));
+
+    // Load persisted sessions
+    let loaded = crate::persist::load_sessions(&path_clone);
+    if !loaded.is_empty() {
+        let first_id = loaded.keys().next().copied();
+        *sessions.write() = loaded;
+        active_id.set(first_id);
+    }
 }
 
 // -- Project Picker (full-page, initial state) --

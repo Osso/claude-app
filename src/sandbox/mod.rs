@@ -13,20 +13,24 @@ fn claude_config_dir() -> String {
 }
 
 /// Build the bwrap command prefix for sandboxing a developer agent.
-/// Developer gets read-write access to the worktree only.
+/// The worktree is mounted AT the project path so Claude Code sees the
+/// "real" project location but writes go to the isolated worktree.
 ///
 /// Note: --proc /proc is omitted because Bun (Claude CLI runtime) hangs
-/// when bwrap mounts a synthetic procfs. Host /proc is visible but harmless
-/// since the sandbox goal is filesystem write protection, not PID isolation.
-pub fn bwrap_command_prefix(worktree_path: &Path) -> Vec<String> {
+/// when bwrap mounts a synthetic procfs.
+pub fn bwrap_command_prefix(worktree_path: &Path, project_path: &Path) -> Vec<String> {
     let worktree = worktree_path.to_string_lossy();
+    let project = project_path.to_string_lossy();
     let claude_dir = claude_config_dir();
     [
         "bwrap",
         "--ro-bind", "/", "/",
         "--dev", "/dev",
         "--tmpfs", "/tmp",
-        "--bind", &worktree, &worktree,
+        // Mount worktree at the project path — Claude resolves project root
+        // via git, so it writes to the project path. This redirects those
+        // writes to the worktree.
+        "--bind", &worktree, &project,
         // Claude CLI needs write access to ~/.claude for session state
         "--bind", &claude_dir, &claude_dir,
         "--die-with-parent",
@@ -83,16 +87,20 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn prefix_contains_bwrap_and_worktree() {
-        let path = PathBuf::from("/home/user/worktrees/session-1");
-        let prefix = bwrap_command_prefix(&path);
+    fn prefix_mounts_worktree_at_project_path() {
+        let worktree = PathBuf::from("/home/user/.claude-sessions/worktrees/abc/dev-0");
+        let project = PathBuf::from("/home/user/projects/myapp");
+        let prefix = bwrap_command_prefix(&worktree, &project);
 
         assert_eq!(prefix[0], "bwrap");
         assert!(prefix.contains(&"--ro-bind".to_string()));
-        assert!(prefix.contains(&"/home/user/worktrees/session-1".to_string()));
+        // Worktree source and project destination must both appear in --bind
+        let bind_idx = prefix.iter().position(|s| s == "--bind").unwrap();
+        assert_eq!(prefix[bind_idx + 1], worktree.to_string_lossy().as_ref());
+        assert_eq!(prefix[bind_idx + 2], project.to_string_lossy().as_ref());
         // Must include writable ~/.claude for Claude CLI session state
         let bind_count = prefix.iter().filter(|s| s.as_str() == "--bind").count();
-        assert!(bind_count >= 2, "need --bind for worktree and .claude");
+        assert!(bind_count >= 2, "need --bind for worktree→project and .claude");
         // No --proc (Bun hangs with synthetic procfs)
         assert!(!prefix.contains(&"--proc".to_string()));
         assert_eq!(prefix.last().unwrap(), "--");

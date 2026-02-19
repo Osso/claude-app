@@ -313,10 +313,26 @@ body {
   font-size: var(--text-sm);
   color: var(--text-subtle);
   user-select: none;
+  min-width: 0;
 }
 
 .message-tool-header:hover {
   background: var(--tint);
+}
+
+.tool-name {
+  flex-shrink: 0;
+}
+
+.tool-preview {
+  color: var(--text-inactive);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  padding-left: 4px;
+  border-left: 1px solid var(--line);
+  margin-left: 2px;
 }
 
 .message-tool-body {

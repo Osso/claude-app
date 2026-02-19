@@ -150,4 +150,8 @@ async fn drain_messages(
             session.status = SessionStatus::Idle;
         }
     }
+    // Save session to disk
+    if let Some(session) = sessions.read().get(&session_id) {
+        crate::persist::save_session(session);
+    }
 }

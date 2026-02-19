@@ -33,6 +33,7 @@ impl ClaudeInput {
 pub enum ClaudeOutput {
     System(SystemMessage),
     Assistant(AssistantMessage),
+    User(UserOutputMessage),
     ToolUse(ToolUseMessage),
     ToolResult(ToolResultMessage),
     Result(ResultMessage),
@@ -75,6 +76,35 @@ pub struct AssistantContent {
 pub enum ContentBlock {
     Text { text: String },
     ToolUse { id: String, name: String, input: Value },
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserOutputMessage {
+    pub message: UserOutputContent,
+    #[serde(flatten)]
+    pub _extra: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserOutputContent {
+    #[serde(default)]
+    pub content: Vec<UserContentBlock>,
+    #[serde(flatten)]
+    pub _extra: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum UserContentBlock {
+    ToolResult {
+        tool_use_id: String,
+        #[serde(default)]
+        content: Option<String>,
+        #[serde(default)]
+        is_error: Option<bool>,
+    },
     #[serde(other)]
     Other,
 }

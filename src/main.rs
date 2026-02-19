@@ -1,6 +1,7 @@
 mod api;
 mod claude;
 mod orchestrator;
+mod persist;
 mod sandbox;
 mod state;
 mod ui;

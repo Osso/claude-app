@@ -59,6 +59,9 @@ fn NewSessionButton() -> Element {
                         Ok(session) => {
                             let id = session.id;
                             sessions.write().insert(id, session);
+                            if let Some(session) = sessions.read().get(&id) {
+                                crate::persist::save_session(session);
+                            }
                             active_id.set(Some(id));
                         }
                         Err(e) => tracing::error!("Failed to create session: {e}"),
@@ -92,7 +95,11 @@ fn SessionList(
                     on_close: move |_| {
                         spawn(async move {
                             manager.write().abort_session(id);
+                            let project_path = sessions.read().get(&id).map(|s| s.project_path.clone());
                             sessions.write().remove(&id);
+                            if let Some(pp) = project_path {
+                                crate::persist::delete_session(id, &pp);
+                            }
                             if active_id() == Some(id) {
                                 let next = sessions.read().keys().next().copied();
                                 active_id.set(next);
@@ -287,12 +294,13 @@ fn spawn_output_relay(
             match rx.recv().await {
                 Ok((agent_id, claude_output)) => {
                     let is_final = claude_output.is_final();
-                    if let Some(msg) = convert_output(claude_output) {
-                        if let Some(session_id) = agent_sessions.get(&agent_id) {
+                    let msgs = convert_output(claude_output);
+                    if let Some(session_id) = agent_sessions.get(&agent_id) {
+                        if !msgs.is_empty() {
                             if let Some(session) =
                                 sessions.write().get_mut(session_id)
                             {
-                                session.messages.push(msg);
+                                session.messages.extend(msgs);
                             }
                         }
                     }
@@ -354,6 +362,11 @@ fn mark_run_completed(
             if matches!(session.status, SessionStatus::Running) {
                 session.status = SessionStatus::Idle;
             }
+        }
+    }
+    for session_id in agent_sessions.values() {
+        if let Some(session) = sessions_write.get(session_id) {
+            crate::persist::save_session(session);
         }
     }
 }

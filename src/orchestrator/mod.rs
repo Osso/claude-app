@@ -134,6 +134,10 @@ impl OrchestratorRuntime {
     pub async fn spawn_run(
         project_path: PathBuf,
     ) -> Result<RunHandle> {
+        // Resolve symlinks — bwrap can't bind to symlink destinations
+        let project_path = project_path.canonicalize()
+            .context("canonicalize project path")?;
+
         let (ui_tx, _) = broadcast::channel(256);
         let (outgoing_tx, outgoing_rx) = mpsc::channel(64);
         let (abort_tx, abort_rx) = mpsc::channel(1);
@@ -233,7 +237,7 @@ impl OrchestratorRuntime {
         let id = AgentId::new_singleton(role);
         let config = AgentConfig {
             working_dir: self.project_path.clone(),
-            worktree_path: None,
+            worktree_bind: None,
         };
         self.spawn_agent(id, config).await
     }
@@ -249,8 +253,9 @@ impl OrchestratorRuntime {
         self.developer_worktrees.insert(id.clone(), worktree_path.clone());
 
         let config = AgentConfig {
-            working_dir: worktree_path.clone(),
-            worktree_path: Some(worktree_path),
+            // Use project_path as working_dir — bwrap mounts worktree there
+            working_dir: self.project_path.clone(),
+            worktree_bind: Some((worktree_path, self.project_path.clone())),
         };
         self.spawn_agent(id, config).await
     }

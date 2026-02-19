@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use tokio::sync::mpsc;
 
 use super::process::{ProcessHandle, SpawnArgs, send_prompt, spawn_claude_process};
-use super::protocol::{ClaudeOutput, ContentBlock};
+use super::protocol::{ClaudeOutput, ContentBlock, UserContentBlock};
 use crate::state::{Message, Session, SessionId, SessionStatus};
 use crate::worktree;
 
@@ -112,52 +112,66 @@ async fn relay_output(
     tx: mpsc::Sender<Message>,
 ) {
     while let Some(output) = claude_rx.recv().await {
-        match convert_output(output) {
-            Some(msg) => {
-                if tx.send(msg).await.is_err() {
-                    break;
-                }
+        for msg in convert_output(output) {
+            if tx.send(msg).await.is_err() {
+                return;
             }
-            None => {}
         }
     }
 }
 
-pub fn convert_output(output: ClaudeOutput) -> Option<Message> {
+pub fn convert_output(output: ClaudeOutput) -> Vec<Message> {
     match output {
-        ClaudeOutput::System(sys) => Some(Message::System {
+        ClaudeOutput::System(sys) => vec![Message::System {
             session_id: sys.session_id,
-        }),
-        ClaudeOutput::Assistant(assistant) => {
-            let text = assistant
-                .message
-                .content
-                .into_iter()
-                .find_map(|block| match block {
-                    ContentBlock::Text { text } => Some(text),
-                    _ => None,
-                })
-                .unwrap_or_default();
-            Some(Message::Assistant { text })
-        }
-        ClaudeOutput::ToolUse(tool) => Some(Message::ToolUse {
+        }],
+        ClaudeOutput::Assistant(assistant) => assistant
+            .message
+            .content
+            .into_iter()
+            .filter_map(|block| match block {
+                ContentBlock::Text { text } if !text.is_empty() => {
+                    Some(Message::Assistant { text })
+                }
+                ContentBlock::ToolUse { id, name, input } => {
+                    Some(Message::ToolUse { id, name, input })
+                }
+                _ => None,
+            })
+            .collect(),
+        ClaudeOutput::User(user) => user
+            .message
+            .content
+            .into_iter()
+            .filter_map(|block| match block {
+                UserContentBlock::ToolResult { tool_use_id, content, is_error } => {
+                    Some(Message::ToolResult {
+                        id: tool_use_id,
+                        output: content.unwrap_or_default(),
+                        is_error: is_error.unwrap_or(false),
+                    })
+                }
+                _ => None,
+            })
+            .collect(),
+        ClaudeOutput::ToolUse(tool) => vec![Message::ToolUse {
             id: tool.tool_use_id,
             name: tool.tool_name,
             input: tool.input,
-        }),
-        ClaudeOutput::ToolResult(result) => Some(Message::ToolResult {
+        }],
+        ClaudeOutput::ToolResult(result) => vec![Message::ToolResult {
             id: result.tool_use_id,
             output: result.output.unwrap_or_default(),
             is_error: result.is_error.unwrap_or(false),
-        }),
-        ClaudeOutput::Result(_) => None,
+        }],
+        ClaudeOutput::Result(_) => vec![],
         ClaudeOutput::Error(err) => {
             let text = err
                 .error
                 .or(err.message)
                 .unwrap_or_else(|| "unknown error".to_string());
-            Some(Message::Error { text })
+            vec![Message::Error { text }]
         }
-        ClaudeOutput::Unknown => None,
+        ClaudeOutput::Unknown => vec![],
     }
 }

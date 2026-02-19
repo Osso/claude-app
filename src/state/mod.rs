@@ -25,7 +25,7 @@ impl fmt::Display for SessionId {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Message {
     User { text: String },
     Assistant { text: String },
@@ -49,14 +49,14 @@ impl PartialEq for Message {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SessionStatus {
     Idle,
     Running,
     Error(String),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Session {
     pub id: SessionId,
     pub title: String,

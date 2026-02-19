@@ -11,12 +11,11 @@ pub fn system_prompt(role: AgentRole) -> &'static str {
 }
 
 /// Permission mode for the Claude CLI `--permission-mode` flag.
-/// Non-developers use bypassPermissions — bwrap read-only sandbox is the real
-/// security boundary. `plan` mode forces plan-only output (unusable for agents),
-/// `dontAsk` auto-approves everything (misleading name).
-pub fn permission_mode(role: AgentRole) -> &'static str {
-    match role {
-        AgentRole::Developer => "acceptEdits",
-        AgentRole::Manager | AgentRole::Architect | AgentRole::Scorer => "bypassPermissions",
-    }
+/// All agents use bypassPermissions — bwrap sandbox is the real security
+/// boundary. `acceptEdits` blocks writes outside the "project root", but
+/// Claude resolves project root via .git which points back to the original
+/// repo path, not the worktree. bypassPermissions skips Claude's permission
+/// checks entirely, letting bwrap enforce write restrictions at the OS level.
+pub fn permission_mode(_role: AgentRole) -> &'static str {
+    "bypassPermissions"
 }

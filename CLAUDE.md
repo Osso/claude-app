@@ -9,6 +9,7 @@ Two runtimes: Dioxus desktop UI (main thread) and Axum REST API (background toki
 ```
 src/
   main.rs              -- Entry point: spawns API thread, launches Dioxus
+  persist.rs           -- Session persistence (save/load/delete JSON files)
   api/
     mod.rs             -- build_router(), start_server(), route definitions
     state.rs           -- AppState (sessions, manager, runs, project_path, jwt_secret)
@@ -30,7 +31,7 @@ src/
     routing.rs         -- Section prefix → target agent routing table
     parser.rs          -- Extract structured sections from agent output
   worktree/
-    mod.rs             -- Git worktree create/remove/reset
+    mod.rs             -- Git worktree create/remove/reset, project_hash()
   sandbox/
     mod.rs             -- bwrap command builders (read-only, developer)
   state/
@@ -43,6 +44,7 @@ src/
     prompt.rs          -- PromptInput (Enter/Shift+Enter)
     message.rs         -- Message rendering per variant
     diff.rs            -- Syntax-highlighted diff blocks
+    projects.rs        -- ProjectPicker, ProjectSwitcher, open_project()
 ```
 
 ## Orchestrator
@@ -53,7 +55,7 @@ Four agent roles communicate via in-process mpsc channels:
 |------|---------|----------------|---------|
 | Manager | read-only bwrap | bypassPermissions | Task decomposition |
 | Architect | read-only bwrap | bypassPermissions | Task validation |
-| Developer | bwrap + writable worktree | acceptEdits | Implementation |
+| Developer | bwrap + writable worktree | bypassPermissions | Implementation |
 | Scorer | read-only bwrap | bypassPermissions | Progress monitoring |
 
 Message routing (section prefix → action):
@@ -74,7 +76,13 @@ Message routing (section prefix → action):
 
 ## Worktrees and Sandboxing
 
-All sessions and developers get isolated git worktrees under `~/.claude-sessions/worktrees/<project-hash>/`. Developer agents run in bwrap with only their worktree writable. Non-developer agents get read-only bwrap.
+All sessions and developers get isolated git worktrees under `~/.claude-sessions/worktrees/<project-hash>/`. Session data (messages, status) persists as JSON files under `~/.claude-sessions/projects/<project-hash>/sessions/<session-id>.json`. Project paths are canonicalized (symlinks resolved) before use — bwrap can't bind to symlink destinations.
+
+Developer bwrap mounts the worktree AT the project path (`--bind <worktree> <project-path>`) so Claude Code writes to the worktree when it targets the project directory. All agents use `bypassPermissions` since bwrap is the hard security boundary (`acceptEdits` blocks writes because Claude resolves project root via `.git` back to the original repo).
+
+Non-developer agents get read-only bwrap (no writable worktree mount).
+
+If a developer produces output without parseable `COMPLETE:`/`BLOCKED:` sections, a synthetic TaskComplete is sent to the manager with the full output text to prevent the manager from being left waiting.
 
 ## REST API
 
