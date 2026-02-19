@@ -67,6 +67,12 @@ impl Agent {
                 self.id, msg.kind, msg.from,
             );
 
+            // Developers get a fresh session for each new task to avoid
+            // accumulating stale context (and growing JSONL files on disk).
+            if self.id.role == AgentRole::Developer && msg.kind == MessageKind::TaskAssignment {
+                self.session_id = None;
+            }
+
             let prompt = format_prompt(&msg);
 
             if let Err(e) = self.process_prompt(&prompt).await {
