@@ -1,121 +1,63 @@
 # claude-app
 
-Rust/Dioxus desktop app wrapping Claude Code CLI with multi-session chat and agent orchestrator.
+Dioxus desktop frontend for agent-orchestrator. Watches JSONL log files and sends messages to agents via Unix socket IPC.
 
 ## Architecture
 
-Two runtimes: Dioxus desktop UI (main thread) and Axum REST API (background tokio runtime on port 3100). Shared state via `Arc<AppState>` with `RwLock`/`Mutex`.
+Single Dioxus desktop runtime (no API server). Discovers projects by scanning `~/.local/share/agent-orchestrator/` for directories with `logs/*.jsonl` files. Live-updates via `notify` file watcher. Sends messages to agents via `peercred-ipc` control socket.
 
 ```
 src/
-  main.rs              -- Entry point: spawns API thread, launches Dioxus
-  persist.rs           -- Session persistence (save/load/delete JSON files)
-  api/
-    mod.rs             -- build_router(), start_server(), route definitions
-    state.rs           -- AppState (sessions, manager, runs, project_path, jwt_secret)
-    auth.rs            -- JWT login + auth middleware
-    types.rs           -- Request/response JSON types
-    sessions.rs        -- Session CRUD + prompt SSE
-    runs.rs            -- Run CRUD + agent messaging + output SSE
-    tests.rs           -- Handler-level tests (tower::oneshot)
-  claude/
-    mod.rs             -- Module exports
-    protocol.rs        -- stream-json types (ClaudeInput, ClaudeOutput, ContentBlock)
-    process.rs         -- Spawn Claude CLI, stdin/stdout relay
-    session.rs         -- SessionManager: process lifecycle, message relay
-  orchestrator/
-    mod.rs             -- OrchestratorRuntime, RunHandle, agent spawn/kill
-    types.rs           -- AgentId, AgentRole, AgentMessage, MessageKind, RuntimeCommand
-    agent.rs           -- Agent loop: inbox → prompt → Claude process → parse → route
-    roles.rs           -- System prompts and permission modes per role
-    routing.rs         -- Section prefix → target agent routing table
-    parser.rs          -- Extract structured sections from agent output
-  worktree/
-    mod.rs             -- Git worktree create/remove/reset, project_hash()
-  sandbox/
-    mod.rs             -- bwrap command builders (read-only, developer)
-  state/
-    mod.rs             -- Session, SessionId, Message, SessionStatus
-    orchestrator.rs    -- RunId, RunStatus, OrchestratorRun
+  main.rs              -- Entry point: launches Dioxus desktop
+  state.rs             -- Project, ChatMessage, TokenUsage, load_projects(), parse_jsonl_from_offset()
+  watcher.rs           -- notify v7 file watcher (ProjectsChanged, JsonlChanged events)
+  ipc.rs               -- peercred-ipc Client wrapper (send_message, start_task, get_status)
   ui/
-    mod.rs             -- App root, ProjectPicker, signal context providers
-    sidebar.rs         -- Session list, orchestrator section
-    chat.rs            -- ChatFeed, MessageList
+    mod.rs             -- App root, signals, watcher bridge, selection effects
+    sidebar.rs         -- Project→Agent tree navigation
+    chat.rs            -- ChatPanel, AgentHeader (token bar), MessageList, IPC send
     prompt.rs          -- PromptInput (Enter/Shift+Enter)
-    message.rs         -- Message rendering per variant
-    diff.rs            -- Syntax-highlighted diff blocks
-    projects.rs        -- ProjectPicker, ProjectSwitcher, open_project()
+    message.rs         -- Render ChatMessage (user/assistant with timestamps + usage)
+    diff.rs            -- Syntax-highlighted diff blocks and code blocks (syntect)
 ```
 
-## Orchestrator
+## Data Flow
 
-Four agent roles communicate via in-process mpsc channels:
+1. `watcher.rs` watches `~/.local/share/agent-orchestrator/` recursively via inotify
+2. Events bridged to Dioxus via std mpsc → tokio mpsc → 200ms poll loop
+3. `ProjectsChanged` → re-scan project directories
+4. `JsonlChanged(path)` → incremental JSONL parse from last offset
+5. `session_reset` entries clear message history
+6. User prompt → `ipc::send_message()` via `spawn_blocking` → peercred-ipc `Client::call()`
 
-| Role | Sandbox | Permission Mode | Purpose |
-|------|---------|----------------|---------|
-| Manager | read-only bwrap | bypassPermissions | Task decomposition |
-| Architect | read-only bwrap | bypassPermissions | Task validation |
-| Developer | bwrap + writable worktree | bypassPermissions | Implementation |
-| Scorer | read-only bwrap | bypassPermissions | Progress monitoring |
+## Control Socket Protocol
 
-Message routing (section prefix → action):
-- `TASK:` → Architect (TaskAssignment)
-- `APPROVED:devN` → Developer-N (TaskAssignment)
-- `REJECTED:` → Manager (ArchitectReview)
-- `COMPLETE:` / `BLOCKED:` → Manager (TaskComplete/TaskGiveUp)
-- `CREW:N` → Runtime: SetCrewSize(1-3)
-- `RELIEVE:reason` → Runtime: fire and replace manager
+Communicates with agent-orchestrator via `/tmp/claude/orchestrator/control.sock` (peercred-ipc msgpack):
 
-## Claude CLI Permission Modes
+```rust
+enum ControlRequest {
+    SendMessage { to: String, content: String },
+    StartTask { task: String },
+    Abort,
+    Status,
+}
 
-- `plan` — Plan-only output, no normal messages. Don't use for agents needing free-form output.
-- `dontAsk` — Auto-approves all tool uses silently ("don't ask, just do it").
-- `acceptEdits` — Auto-accepts file edits, asks for bash.
-- `bypassPermissions` — Skips all permission checks.
-- `default` — Asks user (hangs in non-interactive `-p` mode).
-
-## Worktrees and Sandboxing
-
-All sessions and developers get isolated git worktrees under `~/.claude-sessions/worktrees/<project-hash>/`. Session data (messages, status) persists as JSON files under `~/.claude-sessions/projects/<project-hash>/sessions/<session-id>.json`. Project paths are canonicalized (symlinks resolved) before use — bwrap can't bind to symlink destinations.
-
-Developer bwrap mounts the worktree AT the project path (`--bind <worktree> <project-path>`) so Claude Code writes to the worktree when it targets the project directory. All agents use `bypassPermissions` since bwrap is the hard security boundary (`acceptEdits` blocks writes because Claude resolves project root via `.git` back to the original repo).
-
-Non-developer agents get read-only bwrap (no writable worktree mount).
-
-If a developer produces output without parseable `COMPLETE:`/`BLOCKED:` sections, a synthetic TaskComplete is sent to the manager with the full output text to prevent the manager from being left waiting.
-
-## REST API
-
-All endpoints except `/api/auth` require JWT Bearer token.
-
-```bash
-TOKEN=$(curl -s localhost:3100/api/auth -d '{"secret":"..."}' | jq -r .token)
-curl -H "Authorization: Bearer $TOKEN" localhost:3100/api/sessions
+enum ControlResponse {
+    Ok,
+    Error { message: String },
+    Status { agents: Vec<AgentStatus>, project: String },
+}
 ```
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auth` | Get JWT token |
-| GET | `/api/sessions` | List sessions |
-| POST | `/api/sessions` | Create session |
-| GET | `/api/sessions/{id}` | Get session + messages |
-| DELETE | `/api/sessions/{id}` | Remove session |
-| POST | `/api/sessions/{id}/prompt` | Send prompt (SSE stream) |
-| POST | `/api/sessions/{id}/abort` | Abort running session |
-| GET | `/api/runs` | List runs |
-| POST | `/api/runs` | Create run (spawns agents) |
-| GET | `/api/runs/{id}` | Get run detail |
-| POST | `/api/runs/{id}/abort` | Abort run |
-| POST | `/api/runs/{id}/agents/{agent}/message` | Message agent |
-| GET | `/api/runs/{id}/stream` | SSE stream of agent output |
+## JSONL Log Format
 
-Agent names: `manager`, `architect`, `scorer`, `developer-0` through `developer-2`.
+Files at `~/.local/share/agent-orchestrator/{project}/logs/{agent}.jsonl`:
 
-## Environment Variables
-
-- `CLAUDE_APP_PORT` — API port (default: 3100)
-- `CLAUDE_APP_SECRET` — JWT secret (auto-generated and logged if unset)
-- `RUST_LOG` — Tracing filter
+```json
+{"type":"user","text":"...","timestamp":"2026-03-03T14:30:00Z"}
+{"type":"assistant","text":"...","timestamp":"...","usage":{"input":100,"output":200,"cache_read":0,"cache_creation":0}}
+{"type":"session_reset"}
+```
 
 ## Testing
 
@@ -123,10 +65,12 @@ Agent names: `manager`, `architect`, `scorer`, `developer-0` through `developer-
 cargo test -p claude-app
 ```
 
-API tests use `tower::ServiceExt::oneshot()` with a `TestApp` harness that pre-populates `AppState` directly — no git worktrees or Claude CLI needed. `RunHandle::new_test(agent_ids)` creates handles with fresh channels for verification.
-
-Tests live in `src/api/tests.rs` (handler-level) and inline `#[cfg(test)]` modules in `routing.rs`, `parser.rs`, `sandbox/mod.rs`, and `runs.rs`.
+Tests are inline `#[cfg(test)]` in `diff.rs` (syntax highlighting).
 
 ## Dependencies
 
-pdfium is NOT used here. Key deps: dioxus 0.6 (desktop UI), axum 0.8 (API), tokio (async), jsonwebtoken 9 (auth), syntect 5 (syntax highlighting), tokio-stream (SSE).
+Key deps: dioxus 0.6 (desktop UI), tokio (async), notify 7 (file watching), llm-sdk (LogEntry/LogUsage types), peercred-ipc (Unix socket IPC), syntect 5 (syntax highlighting), serde/serde_json, tracing, dirs.
+
+## Environment Variables
+
+- `RUST_LOG` — Tracing filter

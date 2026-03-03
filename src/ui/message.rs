@@ -1,137 +1,69 @@
 use dioxus::prelude::*;
-use serde_json::Value;
 
-use crate::state::Message;
+use super::diff::render_assistant_text;
+use crate::state::ChatMessage;
 
 #[component]
-pub fn MessageView(message: Message) -> Element {
+pub fn MessageView(message: ChatMessage) -> Element {
     match message {
-        Message::User { text } => rsx! { UserMessage { text } },
-        Message::Assistant { text } => rsx! { AssistantMessage { text } },
-        Message::ToolUse { id: _, name, input } => {
-            let preview = tool_preview(&name, &input);
-            let input_str = serde_json::to_string_pretty(&input).unwrap_or_default();
-            rsx! { ToolUseMessage { name, preview, input: input_str } }
-        }
-        Message::ToolResult { id: _, output, is_error } => {
-            rsx! { ToolResultMessage { output, is_error } }
-        }
-        Message::System { session_id } => rsx! { SystemMessage { session_id } },
-        Message::Error { text } => rsx! { ErrorMessage { text } },
+        ChatMessage::User { text, timestamp } => rsx! {
+            UserMessage { text, timestamp }
+        },
+        ChatMessage::Assistant {
+            text,
+            timestamp,
+            usage,
+        } => rsx! {
+            AssistantMessage { text, timestamp, usage }
+        },
     }
 }
 
-fn tool_preview(name: &str, input: &Value) -> String {
-    let s = match name {
-        "Bash" => input.get("command").and_then(Value::as_str),
-        "Read" | "Write" => input.get("file_path").and_then(Value::as_str),
-        "Edit" => input.get("file_path").and_then(Value::as_str),
-        "Grep" | "Glob" => input.get("pattern").and_then(Value::as_str),
-        "WebFetch" => input.get("url").and_then(Value::as_str),
-        "WebSearch" => input.get("query").and_then(Value::as_str),
-        _ => None,
-    };
-    s.unwrap_or("").to_string()
-}
-
 #[component]
-fn UserMessage(text: String) -> Element {
+fn UserMessage(text: String, timestamp: String) -> Element {
     rsx! {
-        div {
-            class: "message message-user",
+        div { class: "message message-user",
+            if !timestamp.is_empty() {
+                span { class: "message-timestamp text-xs text-inactive", "{format_time(&timestamp)}" }
+            }
             "{text}"
         }
     }
 }
 
 #[component]
-fn AssistantMessage(text: String) -> Element {
-    rsx! {
-        div {
-            class: "message message-assistant",
-            "{text}"
-        }
-    }
-}
-
-#[component]
-fn ToolUseMessage(name: String, preview: String, input: String) -> Element {
-    let mut expanded = use_signal(|| false);
-    let arrow = if expanded() { "\u{25bc}" } else { "\u{25b6}" };
+fn AssistantMessage(
+    text: String,
+    timestamp: String,
+    usage: Option<crate::state::TokenUsage>,
+) -> Element {
+    let html = render_assistant_text(&text);
 
     rsx! {
-        div {
-            class: "message-tool",
-            div {
-                class: "message-tool-header",
-                onclick: move |_| expanded.set(!expanded()),
-                span { class: "toggle-icon", "{arrow}" }
-                span { class: "tool-name", "{name}" }
-                if !expanded() && !preview.is_empty() {
-                    span { class: "tool-preview", "{preview}" }
+        div { class: "message message-assistant",
+            div { class: "message-meta",
+                if !timestamp.is_empty() {
+                    span { class: "message-timestamp text-xs text-inactive", "{format_time(&timestamp)}" }
+                }
+                if let Some(ref u) = usage {
+                    span { class: "message-tokens text-xs text-inactive",
+                        "{u.input}in/{u.output}out"
+                    }
                 }
             }
-            if expanded() {
-                div {
-                    class: "message-tool-body",
-                    "{input}"
-                }
-            }
+            div { dangerous_inner_html: html }
         }
     }
 }
 
-#[component]
-fn ToolResultMessage(output: String, is_error: bool) -> Element {
-    let mut expanded = use_signal(|| false);
-    let header = if is_error { "Error" } else { "Result" };
-    let header_class = if is_error {
-        "message-tool-header message-tool-error"
-    } else {
-        "message-tool-header"
-    };
-    let arrow = if expanded() { "\u{25bc}" } else { "\u{25b6}" };
-
-    rsx! {
-        div {
-            class: "message-tool",
-            div {
-                class: header_class,
-                onclick: move |_| expanded.set(!expanded()),
-                span { class: "toggle-icon", "{arrow}" }
-                span { "{header}" }
-            }
-            if expanded() {
-                div {
-                    class: "message-tool-body",
-                    "{output}"
-                }
-            }
+/// Extract HH:MM from ISO-8601 timestamp
+fn format_time(ts: &str) -> String {
+    // "2026-03-03T14:30:00Z" → "14:30"
+    if let Some(t_pos) = ts.find('T') {
+        let time_part = &ts[t_pos + 1..];
+        if time_part.len() >= 5 {
+            return time_part[..5].to_string();
         }
     }
-}
-
-#[component]
-fn SystemMessage(session_id: Option<String>) -> Element {
-    let text = match session_id {
-        Some(id) => format!("Session started: {id}"),
-        None => "System message".to_string(),
-    };
-
-    rsx! {
-        div {
-            class: "message-system",
-            "{text}"
-        }
-    }
-}
-
-#[component]
-fn ErrorMessage(text: String) -> Element {
-    rsx! {
-        div {
-            class: "message message-error",
-            "{text}"
-        }
-    }
+    ts.to_string()
 }

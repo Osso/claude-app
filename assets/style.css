@@ -252,6 +252,50 @@ body {
 }
 
 /* ============================================================
+   Agent header
+   ============================================================ */
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--elevated);
+}
+
+.agent-header-name {
+  font-weight: 600;
+  font-size: var(--text-lg);
+}
+
+.agent-header-tokens {
+  margin-left: auto;
+}
+
+.project-node {
+  margin-bottom: 2px;
+}
+
+/* ============================================================
+   Message metadata
+   ============================================================ */
+
+.message-meta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.message-timestamp {
+  flex-shrink: 0;
+}
+
+.message-tokens {
+  margin-left: auto;
+}
+
+/* ============================================================
    Chat area
    ============================================================ */
 

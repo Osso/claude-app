@@ -1,36 +1,31 @@
-use std::collections::HashMap;
-
 use dioxus::prelude::*;
 
 use super::message::MessageView;
 use super::prompt::PromptInput;
-use crate::claude::SessionManager;
-use crate::state::{Message, OrchestratorRun, Session, SessionId, SessionStatus};
+use crate::state::ChatMessage;
+
+type Selection = Option<(String, String)>;
 
 #[component]
-pub fn ChatFeed() -> Element {
-    let mut sessions: Signal<HashMap<SessionId, Session>> = use_context();
-    let active_id: Signal<Option<SessionId>> = use_context();
-    let mut manager: Signal<SessionManager> = use_context();
-    let runs: Signal<Vec<OrchestratorRun>> = use_context();
+pub fn ChatPanel() -> Element {
+    let selected = use_context::<Signal<Selection>>();
+    let messages = use_context::<Signal<Vec<ChatMessage>>>();
 
-    let active = active_id();
-    let sessions_read = sessions.read();
-
-    let Some(session_id) = active else {
+    let sel = selected.read().clone();
+    let Some((ref _project, ref agent)) = sel else {
         return rsx! {
-            div { class: "chat-empty", "No session selected" }
+            div { class: "chat-area",
+                div { class: "chat-empty", "Select an agent to view conversation" }
+            }
         };
     };
 
-    let Some(session) = sessions_read.get(&session_id) else {
-        return rsx! {
-            div { class: "chat-empty", "Session not found" }
-        };
-    };
+    let agent_name = agent.clone();
+    let msgs = messages.read().clone();
+    let msg_count = msgs.len();
 
-    let messages = session.messages.clone();
-    let msg_count = messages.len();
+    // Cumulative token totals
+    let (total_input, total_output) = cumulative_tokens(&msgs);
 
     use_effect(move || {
         let _ = msg_count;
@@ -40,13 +35,13 @@ pub fn ChatFeed() -> Element {
     });
 
     rsx! {
-        div {
-            class: "chat-area",
-            MessageList { messages }
+        div { class: "chat-area",
+            AgentHeader { name: agent_name, total_input, total_output }
+            MessageList { messages: msgs }
             PromptInput {
                 disabled: false,
                 on_submit: move |prompt: String| {
-                    submit_prompt(session_id, prompt, &mut sessions, &mut manager, &runs);
+                    send_to_agent(selected, prompt);
                 }
             }
         }
@@ -54,7 +49,21 @@ pub fn ChatFeed() -> Element {
 }
 
 #[component]
-fn MessageList(messages: Vec<Message>) -> Element {
+fn AgentHeader(name: String, total_input: u64, total_output: u64) -> Element {
+    rsx! {
+        div { class: "agent-header",
+            span { class: "agent-header-name", "{name}" }
+            if total_input > 0 || total_output > 0 {
+                span { class: "agent-header-tokens text-sm text-subtle",
+                    "{format_tokens(total_input)}in / {format_tokens(total_output)}out"
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn MessageList(messages: Vec<ChatMessage>) -> Element {
     rsx! {
         div {
             id: "chat-messages",
@@ -66,92 +75,47 @@ fn MessageList(messages: Vec<Message>) -> Element {
     }
 }
 
-fn submit_prompt(
-    session_id: SessionId,
-    prompt: String,
-    sessions: &mut Signal<HashMap<SessionId, Session>>,
-    manager: &mut Signal<SessionManager>,
-    runs: &Signal<Vec<OrchestratorRun>>,
-) {
-    // Add user message immediately
-    if let Some(session) = sessions.write().get_mut(&session_id) {
-        session.messages.push(Message::User { text: prompt.clone() });
-    }
-
-    // Check if this session belongs to an orchestrator run
-    match try_send_to_agent(runs, session_id, &prompt) {
-        Some(true) => return,
-        Some(false) => {
-            if let Some(session) = sessions.write().get_mut(&session_id) {
-                session.messages.push(Message::Error {
-                    text: "Failed to send message to agent".to_string(),
-                });
-            }
-            return;
-        }
-        None => {} // not an orchestrator session, fall through
-    }
-
-    // Regular session — send to claude via SessionManager
-    let result = manager
-        .write()
-        .send_prompt(session_id, &prompt, &mut sessions.write());
-
-    let rx = match result {
-        Ok(rx) => rx,
-        Err(e) => {
-            tracing::error!("Failed to send prompt: {e}");
-            if let Some(session) = sessions.write().get_mut(&session_id) {
-                session.status = SessionStatus::Error(e.to_string());
-            }
-            return;
-        }
+fn send_to_agent(selected: Signal<Selection>, prompt: String) {
+    let sel = selected.read().clone();
+    let Some((ref _project, ref agent)) = sel else {
+        return;
     };
-
-    let sessions = *sessions;
+    let agent = agent.clone();
     spawn(async move {
-        drain_messages(rx, session_id, sessions).await;
+        let result = tokio::task::spawn_blocking(move || {
+            crate::ipc::send_message(&agent, &prompt)
+        })
+        .await;
+        match result {
+            Ok(Ok(crate::ipc::ControlResponse::Ok)) => {}
+            Ok(Ok(crate::ipc::ControlResponse::Error { message })) => {
+                tracing::warn!("IPC send error: {message}");
+            }
+            Ok(Err(e)) => tracing::warn!("IPC call failed: {e}"),
+            Err(e) => tracing::warn!("spawn_blocking failed: {e}"),
+            _ => {}
+        }
     });
 }
 
-/// Try to send a user message to an orchestrator agent.
-/// Returns None if session is not part of a run, Some(true) if sent, Some(false) if send failed.
-fn try_send_to_agent(
-    runs: &Signal<Vec<OrchestratorRun>>,
-    session_id: SessionId,
-    content: &str,
-) -> Option<bool> {
-    let runs_read = runs.read();
-    for run in runs_read.iter() {
-        if let Some(run_handle) = &run.run_handle {
-            for (agent_id, sid) in &run.agent_sessions {
-                if *sid == session_id {
-                    return Some(run_handle.send_to_agent(agent_id, content.to_string()));
-                }
-            }
+fn cumulative_tokens(messages: &[ChatMessage]) -> (u64, u64) {
+    let mut input = 0u64;
+    let mut output = 0u64;
+    for msg in messages {
+        if let ChatMessage::Assistant { usage: Some(u), .. } = msg {
+            input += u.input;
+            output += u.output;
         }
     }
-    None
+    (input, output)
 }
 
-async fn drain_messages(
-    mut rx: tokio::sync::mpsc::Receiver<Message>,
-    session_id: SessionId,
-    mut sessions: Signal<HashMap<SessionId, Session>>,
-) {
-    while let Some(msg) = rx.recv().await {
-        if let Some(session) = sessions.write().get_mut(&session_id) {
-            session.messages.push(msg);
-        }
-    }
-    // Stream ended — set back to idle
-    if let Some(session) = sessions.write().get_mut(&session_id) {
-        if matches!(session.status, SessionStatus::Running) {
-            session.status = SessionStatus::Idle;
-        }
-    }
-    // Save session to disk
-    if let Some(session) = sessions.read().get(&session_id) {
-        crate::persist::save_session(session);
+fn format_tokens(n: u64) -> String {
+    if n >= 1_000_000 {
+        format!("{:.1}M ", n as f64 / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}k ", n as f64 / 1_000.0)
+    } else {
+        format!("{n} ")
     }
 }
