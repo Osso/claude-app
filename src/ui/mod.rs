@@ -1,5 +1,6 @@
 pub mod chat;
 pub mod diff;
+pub mod launch;
 pub mod message;
 pub mod prompt;
 pub mod sidebar;
@@ -11,6 +12,7 @@ use crate::watcher;
 
 /// Selected agent: (project_name, agent_name)
 type Selection = Option<(String, String)>;
+
 
 fn load_agent_messages(project: &str, agent: &str, offset: u64) -> (Vec<ChatMessage>, u64) {
     match state::jsonl_path_for(project, agent) {
@@ -102,6 +104,7 @@ pub fn App() -> Element {
     let selected = use_context_provider(|| Signal::new(Option::<(String, String)>::None));
     let messages = use_context_provider(|| Signal::new(Vec::<ChatMessage>::new()));
     let offset = use_context_provider(|| Signal::new(0u64));
+    let _error = use_context_provider(|| Signal::new(Option::<String>::None));
 
     use_effect(move || {
         projects.set(state::load_projects());

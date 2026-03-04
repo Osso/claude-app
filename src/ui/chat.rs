@@ -5,17 +5,19 @@ use super::prompt::PromptInput;
 use crate::state::ChatMessage;
 
 type Selection = Option<(String, String)>;
+type ErrorMessage = Option<String>;
 
 #[component]
 pub fn ChatPanel() -> Element {
     let selected = use_context::<Signal<Selection>>();
     let messages = use_context::<Signal<Vec<ChatMessage>>>();
+    let error = use_context::<Signal<ErrorMessage>>();
 
     let sel = selected.read().clone();
     let Some((ref _project, ref agent)) = sel else {
         return rsx! {
             div { class: "chat-area",
-                div { class: "chat-empty", "Select an agent to view conversation" }
+                super::launch::LaunchForm {}
             }
         };
     };
@@ -38,10 +40,11 @@ pub fn ChatPanel() -> Element {
         div { class: "chat-area",
             AgentHeader { name: agent_name, total_input, total_output }
             MessageList { messages: msgs }
+            ErrorBanner {}
             PromptInput {
                 disabled: false,
                 on_submit: move |prompt: String| {
-                    send_to_agent(selected, prompt);
+                    send_to_agent(selected, error, prompt);
                 }
             }
         }
@@ -63,6 +66,25 @@ fn AgentHeader(name: String, total_input: u64, total_output: u64) -> Element {
 }
 
 #[component]
+fn ErrorBanner() -> Element {
+    let mut error = use_context::<Signal<ErrorMessage>>();
+    let err = error.read().clone();
+    let Some(err_msg) = err else {
+        return rsx! {};
+    };
+    rsx! {
+        div { class: "ipc-error",
+            span { "{err_msg}" }
+            button {
+                class: "ipc-error-dismiss",
+                onclick: move |_| error.set(None),
+                "×"
+            }
+        }
+    }
+}
+
+#[component]
 fn MessageList(messages: Vec<ChatMessage>) -> Element {
     rsx! {
         div {
@@ -75,12 +97,13 @@ fn MessageList(messages: Vec<ChatMessage>) -> Element {
     }
 }
 
-fn send_to_agent(selected: Signal<Selection>, prompt: String) {
+fn send_to_agent(selected: Signal<Selection>, mut error: Signal<ErrorMessage>, prompt: String) {
     let sel = selected.read().clone();
     let Some((ref _project, ref agent)) = sel else {
         return;
     };
     let agent = agent.clone();
+    error.set(None);
     spawn(async move {
         let result = tokio::task::spawn_blocking(move || {
             crate::ipc::send_message(&agent, &prompt)
@@ -88,14 +111,18 @@ fn send_to_agent(selected: Signal<Selection>, prompt: String) {
         .await;
         match result {
             Ok(Ok(crate::ipc::ControlResponse::Ok)) => {}
-            Ok(Ok(crate::ipc::ControlResponse::Error { message })) => {
-                tracing::warn!("IPC send error: {message}");
-            }
-            Ok(Err(e)) => tracing::warn!("IPC call failed: {e}"),
-            Err(e) => tracing::warn!("spawn_blocking failed: {e}"),
-            _ => {}
+            other => error.set(Some(format_ipc_error(other))),
         }
     });
+}
+
+fn format_ipc_error(result: Result<Result<crate::ipc::ControlResponse, peercred_ipc::IpcError>, tokio::task::JoinError>) -> String {
+    match result {
+        Ok(Ok(crate::ipc::ControlResponse::Error { message })) => message,
+        Ok(Err(e)) => format!("Socket error: {e}"),
+        Err(e) => format!("Internal error: {e}"),
+        _ => "Unknown error".to_string(),
+    }
 }
 
 fn cumulative_tokens(messages: &[ChatMessage]) -> (u64, u64) {
