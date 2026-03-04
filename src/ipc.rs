@@ -1,7 +1,10 @@
 use peercred_ipc::Client;
 use serde::{Deserialize, Serialize};
 
-const CONTROL_SOCKET: &str = "/tmp/claude/orchestrator/control.sock";
+fn control_socket_path() -> String {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    format!("{home}/.claude/orchestrator/control.sock")
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum ControlRequest {
@@ -26,7 +29,7 @@ pub struct AgentStatus {
 
 pub fn send_message(to: &str, content: &str) -> Result<ControlResponse, peercred_ipc::IpcError> {
     Client::call(
-        CONTROL_SOCKET,
+        &control_socket_path(),
         &ControlRequest::SendMessage {
             to: to.to_string(),
             content: content.to_string(),
@@ -36,7 +39,7 @@ pub fn send_message(to: &str, content: &str) -> Result<ControlResponse, peercred
 
 pub fn start_task(task: &str) -> Result<ControlResponse, peercred_ipc::IpcError> {
     Client::call(
-        CONTROL_SOCKET,
+        &control_socket_path(),
         &ControlRequest::StartTask {
             task: task.to_string(),
         },
@@ -44,5 +47,5 @@ pub fn start_task(task: &str) -> Result<ControlResponse, peercred_ipc::IpcError>
 }
 
 pub fn get_status() -> Result<ControlResponse, peercred_ipc::IpcError> {
-    Client::call(CONTROL_SOCKET, &ControlRequest::Status)
+    Client::call(&control_socket_path(), &ControlRequest::Status)
 }
