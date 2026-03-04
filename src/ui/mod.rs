@@ -36,6 +36,7 @@ fn handle_jsonl_changed(
     };
     let expected = state::jsonl_path_for(project, agent);
     if expected.as_ref() != Some(&path) {
+        tracing::debug!("JSONL path mismatch: expected={expected:?} got={path:?}");
         return;
     }
     let cur_offset = *offset.read();
@@ -90,6 +91,7 @@ fn setup_watcher_future(
                         projects.set(state::load_projects());
                     }
                     watcher::WatchEvent::JsonlChanged(path) => {
+                        tracing::debug!("JSONL changed: {}", path.display());
                         handle_jsonl_changed(path, selected, messages, offset);
                     }
                 }
