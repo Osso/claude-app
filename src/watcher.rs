@@ -57,11 +57,8 @@ fn watch_data_root(watcher: &mut RecommendedWatcher) {
         }
     };
 
-    if !root.exists() {
-        tracing::warn!(
-            "Data root not found at {}, skipping watch",
-            root.display()
-        );
+    if let Err(e) = std::fs::create_dir_all(&root) {
+        tracing::warn!("Failed to create data root {}: {e}", root.display());
         return;
     }
 

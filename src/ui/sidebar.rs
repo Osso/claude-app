@@ -10,7 +10,10 @@ pub fn Sidebar() -> Element {
 
     rsx! {
         div { class: "sidebar",
-            div { class: "sidebar-header", "PROJECTS" }
+            div { class: "sidebar-header",
+                span { "PROJECTS" }
+                NewTaskButton {}
+            }
             div { class: "sidebar-list",
                 for project in projects.read().iter() {
                     ProjectNode { project: project.clone() }
@@ -74,6 +77,20 @@ fn AgentItem(project_name: String, agent_name: String) -> Element {
             onclick: move |_| selected.set(Some((pn.clone(), an.clone()))),
             span { class: "agent-entry-label", "{agent_name}" }
             span { class: "badge badge-idle", "{badge}" }
+        }
+    }
+}
+
+#[component]
+fn NewTaskButton() -> Element {
+    let mut selected = use_context::<Signal<Selection>>();
+
+    rsx! {
+        button {
+            class: "btn-new-task",
+            title: "New task",
+            onclick: move |_| selected.set(None),
+            "+"
         }
     }
 }

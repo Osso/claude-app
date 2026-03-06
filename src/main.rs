@@ -1,4 +1,5 @@
 mod ipc;
+mod process;
 mod state;
 mod ui;
 mod watcher;
