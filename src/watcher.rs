@@ -27,10 +27,8 @@ pub fn start_watcher() -> std_mpsc::Receiver<WatchEvent> {
         loop {
             match notify_rx.recv() {
                 Ok(Ok(event)) => {
-                    if let Some(watch_event) = classify_event(event) {
-                        if tx.send(watch_event).is_err() {
-                            break;
-                        }
+                    if forward_watch_event(&tx, event).is_err() {
+                        break;
                     }
                 }
                 Ok(Err(e)) => {
@@ -42,6 +40,16 @@ pub fn start_watcher() -> std_mpsc::Receiver<WatchEvent> {
     });
 
     rx
+}
+
+fn forward_watch_event(
+    tx: &std_mpsc::Sender<WatchEvent>,
+    event: Event,
+) -> Result<(), std_mpsc::SendError<WatchEvent>> {
+    let Some(watch_event) = classify_event(event) else {
+        return Ok(());
+    };
+    tx.send(watch_event)
 }
 
 fn data_root() -> Option<PathBuf> {

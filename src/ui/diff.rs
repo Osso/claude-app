@@ -45,33 +45,26 @@ fn split_fenced_blocks(text: &str) -> Vec<TextPart<'_>> {
     let mut rest = text;
 
     loop {
-        match find_fence_open(rest) {
-            None => {
-                if !rest.is_empty() {
-                    parts.push(TextPart::Plain(rest));
-                }
-                break;
+        let Some((pre, lang, after_open)) = find_fence_open(rest) else {
+            if !rest.is_empty() {
+                parts.push(TextPart::Plain(rest));
             }
-            Some((pre, lang, after_open)) => {
-                if !pre.is_empty() {
-                    parts.push(TextPart::Plain(pre));
-                }
-                match find_fence_close(after_open) {
-                    Some((body, after_close)) => {
-                        parts.push(TextPart::Code { lang, body });
-                        rest = after_close;
-                    }
-                    None => {
-                        // Unclosed fence — treat remainder as code
-                        parts.push(TextPart::Code {
-                            lang,
-                            body: after_open,
-                        });
-                        break;
-                    }
-                }
-            }
+            break;
+        };
+        if !pre.is_empty() {
+            parts.push(TextPart::Plain(pre));
         }
+
+        let Some((body, after_close)) = find_fence_close(after_open) else {
+            // Unclosed fence — treat remainder as code
+            parts.push(TextPart::Code {
+                lang,
+                body: after_open,
+            });
+            break;
+        };
+        parts.push(TextPart::Code { lang, body });
+        rest = after_close;
     }
 
     parts
@@ -217,8 +210,8 @@ mod tests {
         let input = "```diff\n@@ -1,3 +1,3 @@\n-old line\n+new line\n context\n```";
         let result = render_assistant_text(input);
         assert!(result.contains("diff-line-hunk")); // @@ line
-        assert!(result.contains("diff-line-del"));  // - line
-        assert!(result.contains("diff-line-add"));  // + line
+        assert!(result.contains("diff-line-del")); // - line
+        assert!(result.contains("diff-line-add")); // + line
     }
 
     #[test]

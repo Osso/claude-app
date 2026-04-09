@@ -21,10 +21,11 @@ pub fn MessageView(message: ChatMessage) -> Element {
 
 #[component]
 fn UserMessage(text: String, timestamp: String) -> Element {
+    let timestamp_label = formatted_timestamp(&timestamp);
     rsx! {
         div { class: "message message-user",
-            if !timestamp.is_empty() {
-                span { class: "message-timestamp text-xs text-inactive", "{format_time(&timestamp)}" }
+            if let Some(label) = timestamp_label {
+                span { class: "message-timestamp text-xs text-inactive", "{label}" }
             }
             "{text}"
         }
@@ -38,16 +39,20 @@ fn AssistantMessage(
     usage: Option<crate::state::TokenUsage>,
 ) -> Element {
     let html = render_assistant_text(&text);
+    let timestamp_label = formatted_timestamp(&timestamp);
+    let usage_label = usage
+        .as_ref()
+        .map(|token_usage| format!("{}in/{}out", token_usage.input, token_usage.output));
 
     rsx! {
         div { class: "message message-assistant",
             div { class: "message-meta",
-                if !timestamp.is_empty() {
-                    span { class: "message-timestamp text-xs text-inactive", "{format_time(&timestamp)}" }
+                if let Some(label) = timestamp_label {
+                    span { class: "message-timestamp text-xs text-inactive", "{label}" }
                 }
-                if let Some(ref u) = usage {
+                if let Some(label) = usage_label {
                     span { class: "message-tokens text-xs text-inactive",
-                        "{u.input}in/{u.output}out"
+                        "{label}"
                     }
                 }
             }
@@ -66,4 +71,11 @@ fn format_time(ts: &str) -> String {
         }
     }
     ts.to_string()
+}
+
+fn formatted_timestamp(timestamp: &str) -> Option<String> {
+    if timestamp.is_empty() {
+        return None;
+    }
+    Some(format_time(timestamp))
 }
