@@ -25,16 +25,11 @@ pub fn start_watcher() -> std_mpsc::Receiver<WatchEvent> {
         watch_data_root(&mut watcher);
 
         loop {
-            match notify_rx.recv() {
-                Ok(Ok(event)) => {
-                    if forward_watch_event(&tx, event).is_err() {
-                        break;
-                    }
-                }
-                Ok(Err(e)) => {
-                    tracing::warn!("Watch error: {e}");
-                }
-                Err(_) => break,
+            let Ok(notify_event) = notify_rx.recv() else {
+                break;
+            };
+            if handle_notify_event(&tx, notify_event).is_err() {
+                break;
             }
         }
     });
@@ -50,6 +45,19 @@ fn forward_watch_event(
         return Ok(());
     };
     tx.send(watch_event)
+}
+
+fn handle_notify_event(
+    tx: &std_mpsc::Sender<WatchEvent>,
+    notify_event: notify::Result<Event>,
+) -> Result<(), std_mpsc::SendError<WatchEvent>> {
+    match notify_event {
+        Ok(event) => forward_watch_event(tx, event),
+        Err(error) => {
+            tracing::warn!("Watch error: {error}");
+            Ok(())
+        }
+    }
 }
 
 fn data_root() -> Option<PathBuf> {

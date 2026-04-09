@@ -7,24 +7,14 @@ type Selection = Option<(String, String)>;
 #[component]
 pub fn Sidebar() -> Element {
     let projects = use_context::<Signal<Vec<Project>>>();
+    let project_values = projects.read().clone();
 
     rsx! {
         div { class: "sidebar",
             div { class: "sidebar-header",
                 span { "PROJECTS" }
-                NewTaskButton {}
             }
-            div { class: "sidebar-list",
-                for project in projects.read().iter() {
-                    ProjectNode { project: project.clone() }
-                }
-                if projects.read().is_empty() {
-                    div { class: "text-sm text-inactive",
-                        style: "padding: 8px 12px;",
-                        "No projects found"
-                    }
-                }
-            }
+            SidebarList { projects: project_values }
         }
     }
 }
@@ -33,27 +23,43 @@ pub fn Sidebar() -> Element {
 fn ProjectNode(project: Project) -> Element {
     let mut expanded = use_signal(|| true);
     let project_name = project.name.clone();
+    let is_expanded = *expanded.read();
+    let icon = expansion_icon(is_expanded);
 
     rsx! {
         div { class: "project-node",
-            div {
-                class: "collapsible-header",
-                onclick: move |_| expanded.toggle(),
-                span { class: "toggle-icon",
-                    if *expanded.read() { "\u{25be}" } else { "\u{25b8}" }
-                }
-                span { "{project_name}" }
+            ProjectHeader {
+                icon,
+                project_name,
+                on_toggle: move |_| expanded.toggle(),
             }
-            if *expanded.read() {
-                div { class: "collapsible-content",
-                    for agent in project.agents.iter() {
-                        AgentItem {
-                            project_name: project.name.clone(),
-                            agent_name: agent.clone(),
-                        }
-                    }
-                }
+            ExpandedAgentList {
+                expanded: is_expanded,
+                project_name: project.name.clone(),
+                agents: project.agents.clone(),
             }
+        }
+    }
+}
+
+fn expansion_icon(expanded: bool) -> &'static str {
+    if expanded { "\u{25be}" } else { "\u{25b8}" }
+}
+
+#[component]
+fn ProjectHeader(
+    icon: &'static str,
+    project_name: String,
+    on_toggle: EventHandler<MouseEvent>,
+) -> Element {
+    rsx! {
+        div {
+            class: "collapsible-header",
+            onclick: move |evt| on_toggle.call(evt),
+            span { class: "toggle-icon",
+                "{icon}"
+            }
+            span { "{project_name}" }
         }
     }
 }
@@ -81,20 +87,6 @@ fn AgentItem(project_name: String, agent_name: String) -> Element {
     }
 }
 
-#[component]
-fn NewTaskButton() -> Element {
-    let mut selected = use_context::<Signal<Selection>>();
-
-    rsx! {
-        button {
-            class: "btn-new-task",
-            title: "New task",
-            onclick: move |_| selected.set(None),
-            "+"
-        }
-    }
-}
-
 fn role_badge(name: &str) -> &str {
     if name.starts_with("developer") {
         "dev"
@@ -106,5 +98,39 @@ fn role_badge(name: &str) -> &str {
         "scr"
     } else {
         ""
+    }
+}
+
+#[component]
+fn SidebarList(projects: Vec<Project>) -> Element {
+    rsx! {
+        div { class: "sidebar-list",
+            for project in projects.iter().cloned() {
+                ProjectNode { project }
+            }
+            if projects.is_empty() {
+                div { class: "text-sm text-inactive",
+                    style: "padding: 8px 12px;",
+                    "No projects found"
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn ExpandedAgentList(expanded: bool, project_name: String, agents: Vec<String>) -> Element {
+    if !expanded {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "collapsible-content",
+            for agent in agents {
+                AgentItem {
+                    project_name: project_name.clone(),
+                    agent_name: agent,
+                }
+            }
+        }
     }
 }

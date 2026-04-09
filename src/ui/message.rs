@@ -22,11 +22,15 @@ pub fn MessageView(message: ChatMessage) -> Element {
 #[component]
 fn UserMessage(text: String, timestamp: String) -> Element {
     let timestamp_label = formatted_timestamp(&timestamp);
+    let timestamp_node = timestamp_label.map(|label| {
+        rsx! {
+            span { class: "message-timestamp text-xs text-inactive", "{label}" }
+        }
+    });
+
     rsx! {
         div { class: "message message-user",
-            if let Some(label) = timestamp_label {
-                span { class: "message-timestamp text-xs text-inactive", "{label}" }
-            }
+            {timestamp_node}
             "{text}"
         }
     }
@@ -43,18 +47,24 @@ fn AssistantMessage(
     let usage_label = usage
         .as_ref()
         .map(|token_usage| format!("{}in/{}out", token_usage.input, token_usage.output));
+    let timestamp_node = timestamp_label.map(|label| {
+        rsx! {
+            span { class: "message-timestamp text-xs text-inactive", "{label}" }
+        }
+    });
+    let usage_node = usage_label.map(|label| {
+        rsx! {
+            span { class: "message-tokens text-xs text-inactive",
+                "{label}"
+            }
+        }
+    });
 
     rsx! {
         div { class: "message message-assistant",
             div { class: "message-meta",
-                if let Some(label) = timestamp_label {
-                    span { class: "message-timestamp text-xs text-inactive", "{label}" }
-                }
-                if let Some(label) = usage_label {
-                    span { class: "message-tokens text-xs text-inactive",
-                        "{label}"
-                    }
-                }
+                {timestamp_node}
+                {usage_node}
             }
             div { dangerous_inner_html: html }
         }

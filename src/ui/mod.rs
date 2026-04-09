@@ -1,8 +1,6 @@
 pub mod chat;
 pub mod diff;
-pub mod launch;
 pub mod message;
-pub mod prompt;
 pub mod sidebar;
 
 use dioxus::prelude::*;
@@ -12,7 +10,6 @@ use crate::watcher;
 
 /// Selected agent: (project_name, agent_name)
 type Selection = Option<(String, String)>;
-
 
 fn load_agent_messages(project: &str, agent: &str, offset: u64) -> (Vec<ChatMessage>, u64) {
     match state::jsonl_path_for(project, agent) {
@@ -68,36 +65,61 @@ fn setup_selection_effect(
 }
 
 fn setup_watcher_future(
-    mut projects: Signal<Vec<Project>>,
+    projects: Signal<Vec<Project>>,
     messages: Signal<Vec<ChatMessage>>,
     offset: Signal<u64>,
     selected: Signal<Selection>,
 ) {
     use_future(move || async move {
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-        std::thread::spawn(move || {
-            let std_rx = watcher::start_watcher();
-            while let Ok(event) = std_rx.recv() {
-                if tx.send(event).is_err() {
-                    break;
-                }
-            }
-        });
+        let mut rx = spawn_watcher_bridge();
         loop {
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            while let Ok(event) = rx.try_recv() {
-                match event {
-                    watcher::WatchEvent::ProjectsChanged => {
-                        projects.set(state::load_projects());
-                    }
-                    watcher::WatchEvent::JsonlChanged(path) => {
-                        tracing::debug!("JSONL changed: {}", path.display());
-                        handle_jsonl_changed(path, selected, messages, offset);
-                    }
-                }
+            drain_watch_events(&mut rx, projects, messages, offset, selected);
+        }
+    });
+}
+
+fn spawn_watcher_bridge() -> tokio::sync::mpsc::UnboundedReceiver<watcher::WatchEvent> {
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    std::thread::spawn(move || {
+        let std_rx = watcher::start_watcher();
+        while let Ok(event) = std_rx.recv() {
+            if tx.send(event).is_err() {
+                break;
             }
         }
     });
+    rx
+}
+
+fn drain_watch_events(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<watcher::WatchEvent>,
+    projects: Signal<Vec<Project>>,
+    messages: Signal<Vec<ChatMessage>>,
+    offset: Signal<u64>,
+    selected: Signal<Selection>,
+) {
+    while let Ok(event) = rx.try_recv() {
+        apply_watch_event(event, projects, messages, offset, selected);
+    }
+}
+
+fn apply_watch_event(
+    event: watcher::WatchEvent,
+    mut projects: Signal<Vec<Project>>,
+    messages: Signal<Vec<ChatMessage>>,
+    offset: Signal<u64>,
+    selected: Signal<Selection>,
+) {
+    match event {
+        watcher::WatchEvent::ProjectsChanged => {
+            projects.set(state::load_projects());
+        }
+        watcher::WatchEvent::JsonlChanged(path) => {
+            tracing::debug!("JSONL changed: {}", path.display());
+            handle_jsonl_changed(path, selected, messages, offset);
+        }
+    }
 }
 
 #[component]
@@ -106,7 +128,6 @@ pub fn App() -> Element {
     let selected = use_context_provider(|| Signal::new(Option::<(String, String)>::None));
     let messages = use_context_provider(|| Signal::new(Vec::<ChatMessage>::new()));
     let offset = use_context_provider(|| Signal::new(0u64));
-    let _error = use_context_provider(|| Signal::new(Option::<String>::None));
 
     use_effect(move || {
         projects.set(state::load_projects());
