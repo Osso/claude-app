@@ -391,12 +391,10 @@ dependencies = [
 name = "claude-app"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "dioxus",
  "dirs",
  "llm-sdk",
  "notify",
- "peercred-ipc",
  "serde",
  "serde_json",
  "syntect",
@@ -3301,18 +3299,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "peercred-ipc"
-version = "0.1.0"
-source = "git+https://github.com/Osso/peercred-ipc.git#e6bc447ea5678971bb629ea8c07cc98304d10a62"
-dependencies = [
- "libc",
- "rmp-serde",
- "serde",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3904,25 +3890,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "rmp"
-version = "0.8.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ba8be72d372b2c9b35542551678538b562e7cf86c3315773cae48dfbfe7790c"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "rmp-serde"
-version = "1.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72f81bee8c8ef9b577d1681a70ebbc962c232461e397b22c208c43c04b67a155"
-dependencies = [
- "rmp",
- "serde",
 ]
 
 [[package]]

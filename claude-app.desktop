@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Claude App
+Comment=Desktop frontend for agent-orchestrator
+Exec=claude-app
+Icon=claude-app
+Type=Application
+Categories=Development;
+Terminal=false

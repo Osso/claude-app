@@ -1,10 +1,13 @@
-mod ipc;
-mod process;
 mod state;
 mod ui;
 mod watcher;
 
 fn main() {
+    // global_hotkey crate segfaults if DISPLAY is unset on Wayland
+    if std::env::var("DISPLAY").unwrap_or_default().is_empty() {
+        unsafe { std::env::set_var("DISPLAY", ":0") };
+    }
+
     tracing_subscriber::fmt::init();
 
     dioxus::LaunchBuilder::desktop()

@@ -62,11 +62,7 @@ pub fn load_projects() -> Vec<Project> {
         if agents.is_empty() {
             continue;
         }
-        projects.push(Project {
-            name,
-            path,
-            agents,
-        });
+        projects.push(Project { name, path, agents });
     }
 
     projects.sort_by(|a, b| a.name.cmp(&b.name));
