@@ -181,3 +181,191 @@ pub fn parse_jsonl_from_offset(path: &Path, offset: u64) -> (Vec<ChatMessage>, u
 
     (messages, current_offset, had_reset)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn write_log(name: &str, content: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "claude_app_state_{name}_{}.jsonl",
+            std::process::id()
+        ));
+        std::fs::write(&path, content).expect("write test log");
+        path
+    }
+
+    fn temp_data_home(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("claude_app_data_{name}_{}", std::process::id()))
+    }
+
+    #[test]
+    fn parses_user_and_assistant_messages_with_usage() {
+        let path = write_log(
+            "messages",
+            r#"{"type":"user","text":"hello","timestamp":"2026-01-01T00:00:00Z"}
+{"type":"assistant","text":"world","timestamp":"2026-01-01T00:00:01Z","usage":{"input":10,"output":20,"cache_read":3,"cache_creation":4}}
+"#,
+        );
+
+        let (messages, offset, had_reset) = parse_jsonl_from_offset(&path, 0);
+
+        assert_eq!(offset, std::fs::metadata(&path).expect("metadata").len());
+        assert!(!had_reset);
+        assert_eq!(
+            messages,
+            vec![
+                ChatMessage::User {
+                    text: "hello".to_string(),
+                    timestamp: "2026-01-01T00:00:00Z".to_string(),
+                },
+                ChatMessage::Assistant {
+                    text: "world".to_string(),
+                    timestamp: "2026-01-01T00:00:01Z".to_string(),
+                    usage: Some(TokenUsage {
+                        input: 10,
+                        output: 20,
+                        cache_read: 3,
+                        cache_creation: 4,
+                    }),
+                },
+            ]
+        );
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn session_reset_clears_prior_messages() {
+        let path = write_log(
+            "reset",
+            r#"{"type":"user","text":"old","timestamp":"t1"}
+{"type":"session_reset"}
+{"type":"assistant","text":"new","timestamp":"t2"}
+"#,
+        );
+
+        let (messages, _, had_reset) = parse_jsonl_from_offset(&path, 0);
+
+        assert!(had_reset);
+        assert_eq!(
+            messages,
+            vec![ChatMessage::Assistant {
+                text: "new".to_string(),
+                timestamp: "t2".to_string(),
+                usage: None,
+            }]
+        );
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn offset_reads_only_new_lines_and_preserves_offset_on_missing_file() {
+        let path = write_log(
+            "offset",
+            r#"{"type":"user","text":"old","timestamp":"t1"}
+{"type":"assistant","text":"new","timestamp":"t2"}
+"#,
+        );
+        let first_line_len = r#"{"type":"user","text":"old","timestamp":"t1"}
+"#
+        .len() as u64;
+
+        let (messages, offset, had_reset) = parse_jsonl_from_offset(&path, first_line_len);
+        let missing = path.with_extension("missing");
+        let (missing_messages, missing_offset, missing_reset) =
+            parse_jsonl_from_offset(&missing, 42);
+
+        assert!(!had_reset);
+        assert_eq!(offset, std::fs::metadata(&path).expect("metadata").len());
+        assert_eq!(
+            messages,
+            vec![ChatMessage::Assistant {
+                text: "new".to_string(),
+                timestamp: "t2".to_string(),
+                usage: None,
+            }]
+        );
+        assert!(missing_messages.is_empty());
+        assert_eq!(missing_offset, 42);
+        assert!(!missing_reset);
+
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn load_projects_discovers_sorted_projects_and_agents() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let data_home = temp_data_home("projects");
+        let root = data_home.join("agent-orchestrator");
+        let alpha_logs = root.join("alpha").join("logs");
+        let beta_logs = root.join("beta").join("logs");
+        std::fs::create_dir_all(&alpha_logs).expect("create alpha logs");
+        std::fs::create_dir_all(&beta_logs).expect("create beta logs");
+        std::fs::write(alpha_logs.join("manager.jsonl"), "").expect("write manager log");
+        std::fs::write(alpha_logs.join("developer.jsonl"), "").expect("write developer log");
+        std::fs::write(alpha_logs.join("ignored.txt"), "").expect("write ignored file");
+        std::fs::write(beta_logs.join("auditor.jsonl"), "").expect("write auditor log");
+
+        let old_data_home = std::env::var_os("XDG_DATA_HOME");
+        unsafe {
+            std::env::set_var("XDG_DATA_HOME", &data_home);
+        }
+
+        let projects = load_projects();
+        let path = jsonl_path_for("alpha", "manager").expect("jsonl path");
+
+        match old_data_home {
+            Some(value) => unsafe {
+                std::env::set_var("XDG_DATA_HOME", value);
+            },
+            None => unsafe {
+                std::env::remove_var("XDG_DATA_HOME");
+            },
+        }
+        std::fs::remove_dir_all(data_home).ok();
+
+        assert_eq!(projects.len(), 2);
+        assert_eq!(projects[0].name, "alpha");
+        assert_eq!(projects[0].agents, vec!["developer", "manager"]);
+        assert_eq!(projects[1].name, "beta");
+        assert_eq!(projects[1].agents, vec!["auditor"]);
+        assert!(path.ends_with("agent-orchestrator/alpha/logs/manager.jsonl"));
+    }
+
+    #[test]
+    fn parser_ignores_invalid_lines_and_defaults_optional_usage_fields() {
+        let path = write_log(
+            "invalid",
+            r#"not json
+{"type":"assistant","text":"partial","timestamp":"t1","usage":{"input":7,"output":8}}
+{"type":"assistant","timestamp":"missing text"}
+{"type":"other","text":"ignored","timestamp":"t2"}
+
+"#,
+        );
+
+        let (messages, _, had_reset) = parse_jsonl_from_offset(&path, 0);
+
+        assert!(!had_reset);
+        assert_eq!(
+            messages,
+            vec![ChatMessage::Assistant {
+                text: "partial".to_string(),
+                timestamp: "t1".to_string(),
+                usage: Some(TokenUsage {
+                    input: 7,
+                    output: 8,
+                    cache_read: 0,
+                    cache_creation: 0,
+                }),
+            }]
+        );
+
+        std::fs::remove_file(path).ok();
+    }
+}
